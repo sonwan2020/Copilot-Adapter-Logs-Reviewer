@@ -5,67 +5,47 @@
 
 /**
  * Parse a log file text into an array of log entries.
- * Handles truncated JSON arrays (missing trailing `]`).
+ * Expects JSONL format: one valid JSON object per line, no wrapping array.
  * @param {string} text - Raw file content
  * @returns {{ entries: object[], truncated: boolean }}
  */
 export function parseLogFile(text) {
   const trimmed = text.trim();
-  let truncated = false;
-
-  // Try parsing as-is first
-  try {
-    const data = JSON.parse(trimmed);
-    if (Array.isArray(data)) {
-      return { entries: data, truncated: false };
-    }
-    // Single object, wrap in array
-    return { entries: [data], truncated: false };
-  } catch {
-    // Likely truncated, try to fix
+  if (!trimmed) {
+    throw new Error('Log file is empty.');
   }
 
-  // Try appending `]` to close the array
-  try {
-    const fixed = trimmed + '\n]';
-    const data = JSON.parse(fixed);
-    if (Array.isArray(data)) {
-      return { entries: data, truncated: true };
-    }
-  } catch {
-    // Try appending `}]` in case a trailing object is incomplete
-  }
-
-  // Try appending `}]`
-  try {
-    const fixed = trimmed + '\n}]';
-    const data = JSON.parse(fixed);
-    if (Array.isArray(data)) {
-      return { entries: data, truncated: true };
-    }
-  } catch {
-    // Final fallback: try JSONL (one JSON object per line)
-  }
-
-  // Fallback: try parsing as JSONL
+  // Parse as JSONL: one JSON object per line
   const entries = [];
-  for (const line of trimmed.split('\n')) {
+  const lines = trimmed.split('\n');
+  let parseErrors = 0;
+
+  for (const line of lines) {
     const l = line.trim();
-    if (!l || l === '[' || l === ']') continue;
-    // Strip trailing comma
-    const cleaned = l.endsWith(',') ? l.slice(0, -1) : l;
+    if (!l) continue;
     try {
-      entries.push(JSON.parse(cleaned));
+      entries.push(JSON.parse(l));
     } catch {
-      // skip unparseable lines
+      parseErrors++;
     }
   }
 
-  if (entries.length > 0) {
-    return { entries, truncated: true };
+  if (entries.length === 0) {
+    throw new Error('Unable to parse log file. Expected one JSON object per line (JSONL format).');
   }
 
-  throw new Error('Unable to parse log file. Expected a JSON array of log entries.');
+  // If the last line failed to parse, the file may be truncated
+  const lastLine = lines[lines.length - 1].trim();
+  let truncated = false;
+  if (lastLine) {
+    try {
+      JSON.parse(lastLine);
+    } catch {
+      truncated = true;
+    }
+  }
+
+  return { entries, truncated };
 }
 
 /**
