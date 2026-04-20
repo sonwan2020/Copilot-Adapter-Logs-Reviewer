@@ -863,7 +863,7 @@ html, body {
 
 /* ===== Markdown Rendered Content ===== */
 .md-rendered {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.7;
   color: var(--text-primary);
 }
@@ -874,12 +874,12 @@ html, body {
   color: var(--text-primary);
 }
 
-h1.md-heading { font-size: 22px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
-h2.md-heading { font-size: 18px; border-bottom: 1px solid var(--border-light); padding-bottom: 4px; }
-h3.md-heading { font-size: 16px; }
-h4.md-heading { font-size: 14px; }
-h5.md-heading { font-size: 13px; }
-h6.md-heading { font-size: 12px; color: var(--text-secondary); }
+h1.md-heading { font-size: 26px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
+h2.md-heading { font-size: 22px; border-bottom: 1px solid var(--border-light); padding-bottom: 4px; }
+h3.md-heading { font-size: 19px; }
+h4.md-heading { font-size: 17px; }
+h5.md-heading { font-size: 15px; }
+h6.md-heading { font-size: 14px; color: var(--text-secondary); }
 
 .md-paragraph {
   margin: 8px 0;
@@ -906,7 +906,7 @@ h6.md-heading { font-size: 12px; color: var(--text-secondary); }
 
 .md-inline-code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   background: var(--code-bg);
   border: 1px solid var(--code-border);
   border-radius: 3px;
@@ -942,7 +942,7 @@ h6.md-heading { font-size: 12px; color: var(--text-secondary); }
 
 .md-code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);
 }
