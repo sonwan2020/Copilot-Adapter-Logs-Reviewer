@@ -377,8 +377,10 @@ export function renderToolsTab(entry) {
 
 /**
  * Render the Request Comparison tab.
+ * @param {object} entry
+ * @param {object} callbacks - { onSwitchTab, onShowContent }
  */
-export function renderRequestTab(entry) {
+export function renderRequestTab(entry, callbacks = {}) {
   const container = document.createElement('div');
 
   const grid = document.createElement('div');
@@ -405,6 +407,59 @@ export function renderRequestTab(entry) {
     }));
     summary.tools = `[${(summary.tools || []).length} tools]`;
     anthropicCol.appendChild(createJsonView(summary));
+
+    // Add clickable links below the JSON view
+    const linksDiv = document.createElement('div');
+    linksDiv.className = 'request-links';
+
+    // Tools link
+    const toolCount = (entry.anthropicRequest.tools || []).length;
+    if (toolCount > 0) {
+      const toolLink = document.createElement('a');
+      toolLink.className = 'request-link';
+      toolLink.href = '#';
+      toolLink.textContent = `View ${toolCount} tools →`;
+      toolLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (callbacks.onSwitchTab) callbacks.onSwitchTab('tools');
+      });
+      linksDiv.appendChild(toolLink);
+    }
+
+    // System content links
+    const system = entry.anthropicRequest.system || [];
+    system.forEach((s, i) => {
+      const text = s.text || s.content || JSON.stringify(s);
+      const link = document.createElement('a');
+      link.className = 'request-link';
+      link.href = '#';
+      link.textContent = `View system prompt #${i + 1} (${text.length} chars) →`;
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (callbacks.onShowContent) callbacks.onShowContent(`System Prompt #${i + 1}`, text);
+      });
+      linksDiv.appendChild(link);
+    });
+
+    // Message content links
+    const messages = entry.anthropicRequest.messages || [];
+    messages.forEach((m, i) => {
+      const blocks = normalizeContent(m.content);
+      const fullText = blocks.map(b => b.text || JSON.stringify(b)).join('\n');
+      if (fullText.length > 200) {
+        const link = document.createElement('a');
+        link.className = 'request-link';
+        link.href = '#';
+        link.textContent = `View message #${i + 1} [${m.role}] (${fullText.length} chars) →`;
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (callbacks.onShowContent) callbacks.onShowContent(`Message #${i + 1} (${m.role})`, fullText);
+        });
+        linksDiv.appendChild(link);
+      }
+    });
+
+    anthropicCol.appendChild(linksDiv);
   }
 
   // OpenAI Request
@@ -422,6 +477,43 @@ export function renderRequestTab(entry) {
     }));
     summary.tools = `[${(summary.tools || []).length} tools]`;
     openaiCol.appendChild(createJsonView(summary));
+
+    // Add clickable links below the JSON view
+    const linksDiv = document.createElement('div');
+    linksDiv.className = 'request-links';
+
+    // Tools link
+    const toolCount = (entry.openaiRequest.tools || []).length;
+    if (toolCount > 0) {
+      const toolLink = document.createElement('a');
+      toolLink.className = 'request-link';
+      toolLink.href = '#';
+      toolLink.textContent = `View ${toolCount} tools →`;
+      toolLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (callbacks.onSwitchTab) callbacks.onSwitchTab('tools');
+      });
+      linksDiv.appendChild(toolLink);
+    }
+
+    // Message content links
+    const messages = entry.openaiRequest.messages || [];
+    messages.forEach((m, i) => {
+      const content = m.content || '';
+      if (content.length > 200) {
+        const link = document.createElement('a');
+        link.className = 'request-link';
+        link.href = '#';
+        link.textContent = `View message #${i + 1} [${m.role}] (${content.length} chars) →`;
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (callbacks.onShowContent) callbacks.onShowContent(`Message #${i + 1} (${m.role})`, content);
+        });
+        linksDiv.appendChild(link);
+      }
+    });
+
+    openaiCol.appendChild(linksDiv);
   }
 
   grid.appendChild(anthropicCol);

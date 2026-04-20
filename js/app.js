@@ -255,7 +255,10 @@ function renderActiveTab() {
       tabContent.appendChild(renderToolsTab(entry));
       break;
     case 'request':
-      tabContent.appendChild(renderRequestTab(entry));
+      tabContent.appendChild(renderRequestTab(entry, {
+        onSwitchTab: (tabName) => setActiveTab(tabName),
+        onShowContent: (title, text) => showContentViewer(title, text),
+      }));
       break;
     case 'response':
       tabContent.appendChild(renderResponseTab(entry));
@@ -272,6 +275,58 @@ function setActiveTab(tabName) {
   });
 
   renderActiveTab();
+}
+
+// ===== Content Viewer =====
+function showContentViewer(title, text) {
+  // Remove existing viewer if any
+  const existing = document.querySelector('.content-viewer-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'content-viewer-overlay';
+
+  const viewer = document.createElement('div');
+  viewer.className = 'content-viewer';
+
+  const header = document.createElement('div');
+  header.className = 'content-viewer-header';
+  header.innerHTML = `<span class="content-viewer-title"></span>`;
+  header.querySelector('.content-viewer-title').textContent = title;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'content-viewer-close';
+  closeBtn.textContent = '\u00d7';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  header.appendChild(closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'content-viewer-body';
+
+  const pre = document.createElement('pre');
+  pre.className = 'content-viewer-text';
+  pre.textContent = text;
+  body.appendChild(pre);
+
+  viewer.appendChild(header);
+  viewer.appendChild(body);
+  overlay.appendChild(viewer);
+
+  // Close on overlay click (outside viewer)
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // Close on Escape key
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+
+  document.body.appendChild(overlay);
 }
 
 // ===== Drag & Drop =====
