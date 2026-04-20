@@ -303,10 +303,8 @@ function showContentViewer(title, text) {
   const body = document.createElement('div');
   body.className = 'content-viewer-body';
 
-  const pre = document.createElement('pre');
-  pre.className = 'content-viewer-text';
-  pre.textContent = text;
-  body.appendChild(pre);
+  // Render content with markdown formatting
+  body.appendChild(renderMarkdown(text));
 
   viewer.appendChild(header);
   viewer.appendChild(body);
@@ -327,6 +325,186 @@ function showContentViewer(title, text) {
   document.addEventListener('keydown', escHandler);
 
   document.body.appendChild(overlay);
+}
+
+/**
+ * Render text as formatted markdown with syntax coloring.
+ * Handles: headings, code blocks (with language label), inline code,
+ * bold, italic, links, blockquotes, horizontal rules, and lists.
+ */
+function renderMarkdown(text) {
+  const container = document.createElement('div');
+  container.className = 'md-rendered';
+
+  // Detect if it's JSON
+  const trimmed = text.trim();
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const pre = document.createElement('pre');
+      pre.className = 'md-code-block';
+      const code = document.createElement('code');
+      code.className = 'md-code lang-json';
+      code.textContent = JSON.stringify(parsed, null, 2);
+      pre.appendChild(code);
+      container.appendChild(pre);
+      return container;
+    } catch { /* not JSON, continue with markdown */ }
+  }
+
+  // Split into code blocks and the rest
+  const parts = text.split(/(```[\s\S]*?```)/g);
+
+  for (const part of parts) {
+    if (part.startsWith('```')) {
+      // Fenced code block
+      const content = part.slice(3, -3);
+      const firstNewline = content.indexOf('\n');
+      const lang = firstNewline > 0 ? content.slice(0, firstNewline).trim() : '';
+      const code = firstNewline > 0 ? content.slice(firstNewline + 1) : content;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'md-code-wrapper';
+
+      if (lang) {
+        const langLabel = document.createElement('span');
+        langLabel.className = 'md-code-lang';
+        langLabel.textContent = lang;
+        wrapper.appendChild(langLabel);
+      }
+
+      const pre = document.createElement('pre');
+      pre.className = 'md-code-block';
+      const codeEl = document.createElement('code');
+      codeEl.className = `md-code${lang ? ` lang-${lang}` : ''}`;
+      codeEl.textContent = code;
+      pre.appendChild(codeEl);
+      wrapper.appendChild(pre);
+      container.appendChild(wrapper);
+    } else {
+      // Process markdown lines
+      const lines = part.split('\n');
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Horizontal rule
+        if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
+          container.appendChild(document.createElement('hr'));
+          i++;
+          continue;
+        }
+
+        // Headings
+        const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          const el = document.createElement(`h${level}`);
+          el.className = 'md-heading';
+          el.innerHTML = formatInline(headingMatch[2]);
+          container.appendChild(el);
+          i++;
+          continue;
+        }
+
+        // Blockquote
+        if (line.trimStart().startsWith('> ')) {
+          const bq = document.createElement('blockquote');
+          bq.className = 'md-blockquote';
+          let bqLines = [];
+          while (i < lines.length && lines[i].trimStart().startsWith('> ')) {
+            bqLines.push(lines[i].trimStart().slice(2));
+            i++;
+          }
+          bq.innerHTML = formatInline(bqLines.join('\n'));
+          container.appendChild(bq);
+          continue;
+        }
+
+        // Unordered list
+        if (/^\s*[-*+]\s+/.test(line)) {
+          const ul = document.createElement('ul');
+          ul.className = 'md-list';
+          while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+            const li = document.createElement('li');
+            li.innerHTML = formatInline(lines[i].replace(/^\s*[-*+]\s+/, ''));
+            ul.appendChild(li);
+            i++;
+          }
+          container.appendChild(ul);
+          continue;
+        }
+
+        // Ordered list
+        if (/^\s*\d+[.)]\s+/.test(line)) {
+          const ol = document.createElement('ol');
+          ol.className = 'md-list';
+          while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+            const li = document.createElement('li');
+            li.innerHTML = formatInline(lines[i].replace(/^\s*\d+[.)]\s+/, ''));
+            ol.appendChild(li);
+            i++;
+          }
+          container.appendChild(ol);
+          continue;
+        }
+
+        // Empty line = paragraph break
+        if (line.trim() === '') {
+          i++;
+          continue;
+        }
+
+        // Regular paragraph
+        const para = document.createElement('p');
+        para.className = 'md-paragraph';
+        let paraLines = [];
+        while (i < lines.length && lines[i].trim() !== '' &&
+               !lines[i].match(/^#{1,6}\s/) &&
+               !/^\s*[-*+]\s+/.test(lines[i]) &&
+               !/^\s*\d+[.)]\s+/.test(lines[i]) &&
+               !lines[i].trimStart().startsWith('> ') &&
+               !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i].trim())) {
+          paraLines.push(lines[i]);
+          i++;
+        }
+        para.innerHTML = formatInline(paraLines.join('\n'));
+        container.appendChild(para);
+      }
+    }
+  }
+
+  return container;
+}
+
+/**
+ * Format inline markdown: bold, italic, inline code, links.
+ */
+function formatInline(text) {
+  return escapeHtml(text)
+    // Inline code (must come first to prevent inner formatting)
+    .replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="md-bold">$1</strong>')
+    .replace(/__(.+?)__/g, '<strong class="md-bold">$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em class="md-italic">$1</em>')
+    .replace(/_(.+?)_/g, '<em class="md-italic">$1</em>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a class="md-link" href="$2" target="_blank">$1</a>')
+    // Preserve newlines within paragraphs
+    .replace(/\n/g, '<br>');
+}
+
+/**
+ * Escape HTML characters.
+ */
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // ===== Drag & Drop =====
