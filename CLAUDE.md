@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Copilot Adapter Logs Reviewer is a zero-dependency, client-side web application for visualizing Copilot Adapter log files (JSONL format). It runs entirely in the browser with a strict Content Security Policy — no server, no bundler, no external libraries.
+Copilot Adapter Logs Viewer is a zero-dependency, client-side web application for visualizing Copilot Adapter log files (JSONL format). It runs entirely in the browser with a strict Content Security Policy — no server, no bundler, no external libraries.
 
 ## Development
 

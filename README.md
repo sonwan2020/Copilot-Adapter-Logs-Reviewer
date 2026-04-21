@@ -1,4 +1,4 @@
-# Copilot Adapter Logs Reviewer
+# Copilot Adapter Logs Viewer
 
 A lightweight, client-side web application for analyzing and visualizing Copilot Adapter log files. No server required — runs entirely in the browser.
 
