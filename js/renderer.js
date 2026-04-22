@@ -76,7 +76,7 @@ function createJsonView(obj) {
  * @param {string} initialBtnText - Initial button label (default: 'Plain Text')
  * @returns {HTMLElement}
  */
-export function createLazyToggleWrapper(text, initialBtnText = 'Plain Text') {
+export function createLazyToggleWrapper(text, initialBtnText = 'Formatted') {
   const wrapper = document.createElement('div');
   wrapper.className = 'md-toggle-wrapper';
 
@@ -466,6 +466,9 @@ function renderContentBlock(block, toolUseMap) {
 
     // Collapsible content section (hidden by default, rendered lazily on first expand)
     if (block.content) {
+      // Detect language from linked Read tool input
+      const detectedLang = detectLangFromToolInput(toolName, toolInfo?.input);
+
       const contentHeader = document.createElement('div');
       contentHeader.className = 'tool-result-content-header';
       contentHeader.style.cursor = 'pointer';
@@ -476,7 +479,7 @@ function renderContentBlock(block, toolUseMap) {
       contentHeader.appendChild(toggleIcon);
 
       const contentLabel = document.createElement('span');
-      contentLabel.textContent = 'Content';
+      contentLabel.textContent = detectedLang ? `Content (${detectedLang})` : 'Content';
       contentHeader.appendChild(contentLabel);
       div.appendChild(contentHeader);
 
@@ -490,7 +493,7 @@ function renderContentBlock(block, toolUseMap) {
         // Lazy render: build body content on first expand
         if (isHidden && !bodyRendered) {
           bodyRendered = true;
-          renderToolResultBody(body, block, toolName, toolInfo, toolUseMap);
+          renderToolResultBody(body, block, toolName, toolInfo, toolUseMap, detectedLang);
         }
 
         body.classList.toggle('hidden');
@@ -514,7 +517,7 @@ function renderContentBlock(block, toolUseMap) {
  * Render the content body of a tool_result block.
  * Extracted so it can be called lazily on first expand.
  */
-function renderToolResultBody(body, block, toolName, toolInfo, toolUseMap) {
+function renderToolResultBody(body, block, toolName, toolInfo, toolUseMap, detectedLang) {
   const contentBlocks = normalizeContent(block.content);
   for (const cb of contentBlocks) {
     if (cb.type === 'text') {
@@ -532,10 +535,9 @@ function renderToolResultBody(body, block, toolName, toolInfo, toolUseMap) {
         }
       }
 
-      // Detect file extension from linked Read tool input for syntax highlighting
-      const lang = detectLangFromToolInput(toolName, toolInfo?.input);
-      if (lang) {
-        // Render as syntax-highlighted code block
+      // Use pre-detected language for syntax highlighting
+      if (detectedLang) {
+        // Render as syntax-highlighted code block (no lang label — shown in header)
         const wrapper = document.createElement('div');
         wrapper.className = 'md-toggle-wrapper';
 
@@ -546,14 +548,10 @@ function renderToolResultBody(body, block, toolName, toolInfo, toolUseMap) {
 
         const codeWrapper = document.createElement('div');
         codeWrapper.className = 'md-code-wrapper';
-        const langLabel = document.createElement('span');
-        langLabel.className = 'md-code-lang';
-        langLabel.textContent = lang;
-        codeWrapper.appendChild(langLabel);
         const pre = document.createElement('pre');
         pre.className = 'md-code-block';
         const codeEl = document.createElement('code');
-        codeEl.className = `md-code lang-${lang}`;
+        codeEl.className = `md-code lang-${detectedLang}`;
         codeEl.textContent = rawText;
         pre.appendChild(codeEl);
         codeWrapper.appendChild(pre);
@@ -834,7 +832,6 @@ export function renderSystemTab(entry) {
   system.forEach((s, i) => {
     const details = document.createElement('details');
     details.className = 'collapsible';
-    if (i === 0) details.open = true;
 
     const summary = document.createElement('summary');
     const text = s.text || s.content || JSON.stringify(s);
@@ -862,16 +859,6 @@ export function renderSystemTab(entry) {
     details.appendChild(content);
     container.appendChild(details);
   });
-
-  // Trigger lazy render for the first (auto-opened) prompt
-  if (container.firstElementChild) {
-    const firstDetails = container.firstElementChild;
-    const firstContent = firstDetails.querySelector('.collapsible-content');
-    if (firstContent && firstContent.children.length === 0) {
-      const firstText = (system[0].text || system[0].content || JSON.stringify(system[0]));
-      firstContent.appendChild(createLazyToggleWrapper(firstText));
-    }
-  }
 
   return container;
 }
