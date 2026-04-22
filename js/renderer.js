@@ -114,6 +114,20 @@ export function createLazyToggleWrapper(text, initialBtnText = 'Formatted') {
 }
 
 /**
+ * Apply syntax highlighting to a <code> element using highlight.js.
+ * Falls back gracefully if hljs is not loaded.
+ * @param {HTMLElement} codeEl - The <code> element to highlight
+ * @param {string} lang - Language identifier (e.g., 'javascript', 'python')
+ */
+function applyHighlight(codeEl, lang) {
+  if (typeof hljs === 'undefined') return;
+  if (lang) {
+    codeEl.classList.add(`language-${lang}`);
+  }
+  hljs.highlightElement(codeEl);
+}
+
+/**
  * Escape HTML characters.
  */
 function escapeHtml(str) {
@@ -145,7 +159,10 @@ function renderTextContent(text) {
       const pre = document.createElement('pre');
       const codeEl = document.createElement('code');
       codeEl.textContent = code;
-      if (lang) codeEl.dataset.lang = lang;
+      if (lang) {
+        codeEl.dataset.lang = lang;
+        applyHighlight(codeEl, lang);
+      }
       pre.appendChild(codeEl);
       codeBlock.appendChild(pre);
       codeBlock.appendChild(createCopyButton(code));
@@ -184,6 +201,7 @@ export function renderMarkdownContent(text) {
       const code = document.createElement('code');
       code.className = 'md-code lang-json';
       code.textContent = JSON.stringify(parsed, null, 2);
+      applyHighlight(code, 'json');
       pre.appendChild(code);
       container.appendChild(pre);
       return container;
@@ -216,6 +234,7 @@ export function renderMarkdownContent(text) {
       const codeEl = document.createElement('code');
       codeEl.className = `md-code${lang ? ` lang-${lang}` : ''}`;
       codeEl.textContent = code;
+      if (lang) applyHighlight(codeEl, lang);
       pre.appendChild(codeEl);
       wrapper.appendChild(pre);
       container.appendChild(wrapper);
@@ -553,6 +572,7 @@ function renderToolResultBody(body, block, toolName, toolInfo, toolUseMap, detec
         const codeEl = document.createElement('code');
         codeEl.className = `md-code lang-${detectedLang}`;
         codeEl.textContent = rawText;
+        applyHighlight(codeEl, detectedLang);
         pre.appendChild(codeEl);
         codeWrapper.appendChild(pre);
 

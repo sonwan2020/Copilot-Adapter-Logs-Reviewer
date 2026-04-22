@@ -79,6 +79,12 @@ function toggleTheme() {
 function updateThemeIcon() {
   const isDark = document.documentElement.dataset.theme === 'dark';
   themeToggle.textContent = isDark ? '\u2600' : '\u263E';
+
+  // Swap highlight.js theme
+  const lightSheet = document.getElementById('hljs-theme-light');
+  const darkSheet = document.getElementById('hljs-theme-dark');
+  if (lightSheet) lightSheet.disabled = isDark;
+  if (darkSheet) darkSheet.disabled = !isDark;
 }
 
 // ===== File Loading =====
