@@ -438,12 +438,47 @@ export function renderMessagesTab(entry) {
 
     const header = document.createElement('div');
     header.className = 'message-header';
-    header.innerHTML = `<span>${escapeHtml(msg.role.toUpperCase())}</span>`;
+    header.style.cursor = 'pointer';
+
+    const roleSpan = document.createElement('span');
+    roleSpan.textContent = msg.role.toUpperCase();
+    header.appendChild(roleSpan);
+
+    // Preview text for collapsed state
+    const blocks = normalizeContent(msg.content);
+    let previewText = '';
+    for (const block of blocks) {
+      if (block.type === 'text') {
+        previewText = (block.text || '').substring(0, 80).replace(/\n/g, ' ');
+        break;
+      } else if (block.type === 'tool_use') {
+        previewText = `Tool: ${block.name || 'unknown'}`;
+        break;
+      } else if (block.type === 'tool_result') {
+        previewText = `Tool Result`;
+        break;
+      }
+    }
+    const previewSpan = document.createElement('span');
+    previewSpan.className = 'message-preview';
+    previewSpan.textContent = previewText + (previewText.length >= 80 ? '...' : '');
+    header.appendChild(previewSpan);
+
+    const toggleIcon = document.createElement('span');
+    toggleIcon.className = 'message-toggle-icon';
+    toggleIcon.textContent = '\u25B6';
+    header.appendChild(toggleIcon);
 
     const body = document.createElement('div');
-    body.className = 'message-body';
+    body.className = 'message-body hidden';
 
-    const blocks = normalizeContent(msg.content);
+    header.addEventListener('click', () => {
+      const isHidden = body.classList.contains('hidden');
+      body.classList.toggle('hidden');
+      toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+      previewSpan.classList.toggle('hidden', isHidden);
+    });
+
     for (const block of blocks) {
       if (block.type === 'text' && msg.role === 'user') {
         // Render user messages with full markdown formatting + plain text toggle

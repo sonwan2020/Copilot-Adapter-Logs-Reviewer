@@ -44,3 +44,62 @@ when the search match in tools, when click the item in the left list, display to
 add plain text button to response body
 
 save all my input prompt to file prompt.txt
+2026-04-22
+
+1. maintain a consistant index starting from 0 to each line in the log file. so when I filter the logs, the index won't change, I can see log 3, 8 , 10 meet the filter pattern
+
+2. after search, when I click the item on the left sidebar, open the place of the first match string. For example, when I search "Code taht expects a JSON array", the items meet this pattern will list on the left sidebar then I click one of the item in the sidebar, and the Messages contains the pattern string, open the Message tab of the target item, and scroll to the first matching place
+
+3. add pre and next buttons to the right-upper of the entry page.
+   - if there is no search pattern in the left search bar, disable the button
+   - enable the button on successful search meet
+   - on click next, goto the next matched place and highlight the matched string
+   - the search for pre/next focus on single entry only, order Messages, system, tools, do not search cross entry
+   - if this is the first matched place, disable pre button, if this is the last matched place, disable next button. on other cases the pre/next buttons are enabled
+
+4. highlight all matched string with with a lighter yellow, keep 'current' match unchanged
+
+5. do some enhancements:
+   - support string search in tab Response, so I can search the response id like eac475b3-2fd0-4468-9341-73219fa3814f
+   - better format the Raw SSE Response window, extract common properties like id/model and display as a table at the beginning, show content of delta in the delta table, with created | delta
+   - for special lines with [DONE] or finish_reason, put them after the formatted table, also extract the id/model out
+   - add toggle button for raw response, default to the formatted
+
+6. when the response choice.delta.content is null, please also show the tool_calls in the formatted table. The tool_calls is a list of function calls, make sure format them as json
+
+7. in the formatted response table, output delta.content / delta.reasoning_text / function.name / function.id / function.arguments
+   - add title like content: 'some content', reasoning_text: 'some text', function name: 'function name' etc
+   - do not output empty values
+
+8. summarize the same delta type together:
+   - if there are more lines of content: 'xxx', content: ' yyy ', content: 'zzz.' display like this content: 'xxx yyy zzz.', and hide the content list below, user can toggle open the content list
+   - do the same for reasoning_text as content
+   - if it is a function call, summarize to function id / name arguments, functions should summarize to different func ids
+   NOTE, do not summarize cross different types, content / content / function id function name / function arguments / function id function name / function arguments / content / content, should summarize to 3 parts: content 1 / function 1 / function 2 / content 2
+
+9. improve the formatted content of functions in Response.SSE Response
+   - simplify the titles to function id / name / arguments
+   - add "Show xx individual Chunks" after each function
+
+10. on the "Show xxx individual chunks", do not show the formatted json, just the origin line is enough
+    - at the top-right of the first group, there is a label saying 'x chunks', remove it
+
+11. on the "Show xxx individual chunks", do not show the formatted json, just the origin line is enough
+
+12. update the width of the "Drag & drop .jsonl log files here", make it half width on the left
+
+13. refine the response format:
+    - for content: Content: grouped content string
+    - for reasoning_text: Reasoning: grouped reasoning_text
+    - for function: Function: id - <id>, name - <name>, arguments: json arguments
+    - different background color for Content title and content string
+    - Use Id / Name / Arguments for functions, separator from - to :
+
+14. improve the format of functions:
+    - use bold fonts for id and name values
+    - align the separator ':' for id / name / arguments
+
+15. make function id / name / arguments left align
+    move the tail : in "Function:", "Reasoning:" and "Content:"
+
+16. in the Messages tab, Shrink the content by USER/ASSISTANT, toggle to expand or shrink the content on click

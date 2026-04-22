@@ -516,6 +516,26 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  user-select: none;
+}
+
+.message-preview {
+  flex: 1;
+  font-weight: 400;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-toggle-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .message.user .message-header {
