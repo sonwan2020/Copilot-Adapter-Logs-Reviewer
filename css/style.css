@@ -1573,3 +1573,64 @@ h6.md-heading { font-size: 14px; color: var(--text-secondary); }
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Highlight.js Integration ===== */
+.md-code-block code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
+.code-block pre code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
+/* ===== Loading Overlay (streaming file parse) ===== */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.loading-box {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 24px 32px;
+  min-width: 340px;
+  max-width: 440px;
+  text-align: center;
+}
+
+.loading-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  word-break: break-all;
+}
+
+.loading-bar-outer {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.loading-bar-inner {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.15s ease;
+}
+
+.loading-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

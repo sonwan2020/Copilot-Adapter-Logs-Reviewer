@@ -1,7 +1,7 @@
 /**
  * Main application module - wires everything together.
  */
-import { parseLogFile, formatSize } from './parser.js';
+import { parseLogFile, parseLogFileStreaming, formatSize } from './parser.js';
 import {
   renderEntryList,
   renderDetailHeader,
@@ -11,7 +11,7 @@ import {
   renderRequestTab,
   renderResponseTab,
   renderRawTab,
-  renderMarkdownContent,
+  createLazyToggleWrapper,
   modelLabel,
 } from './renderer.js';
 
@@ -79,6 +79,12 @@ function toggleTheme() {
 function updateThemeIcon() {
   const isDark = document.documentElement.dataset.theme === 'dark';
   themeToggle.textContent = isDark ? '\u2600' : '\u263E';
+
+  // Swap highlight.js theme
+  const lightSheet = document.getElementById('hljs-theme-light');
+  const darkSheet = document.getElementById('hljs-theme-dark');
+  if (lightSheet) lightSheet.disabled = isDark;
+  if (darkSheet) darkSheet.disabled = !isDark;
 }
 
 // ===== File Loading =====
@@ -86,6 +92,42 @@ function handleFiles(files) {
   if (!files || files.length === 0) return;
 
   const file = files[0]; // Handle first file
+
+  // Use streaming parser for lower memory usage; fall back to FileReader
+  // if the Blob.stream() API is not available.
+  if (typeof file.stream === 'function') {
+    handleFileStreaming(file);
+  } else {
+    handleFileLegacy(file);
+  }
+}
+
+/**
+ * Stream-parse the file in chunks. Shows a progress indicator while loading.
+ * Peak memory ≈ parsed entries only (no full-file string copy).
+ */
+async function handleFileStreaming(file) {
+  const progress = showLoadingProgress(file.name, file.size);
+
+  try {
+    const result = await parseLogFileStreaming(file, ({ bytesRead, totalBytes }) => {
+      const pct = totalBytes > 0 ? Math.round((bytesRead / totalBytes) * 100) : 0;
+      progress.update(pct, `Parsing\u2026 ${formatSize(bytesRead)} / ${formatSize(totalBytes)}`);
+    });
+
+    progress.remove();
+    loadEntries(result.entries, file.name, file.size, result.truncated);
+  } catch (err) {
+    progress.remove();
+    alert(`Error parsing file: ${err.message}`);
+  }
+}
+
+/**
+ * Legacy path: read entire file into a string via FileReader.
+ * Used only when Blob.stream() is unavailable (older browsers).
+ */
+function handleFileLegacy(file) {
   const reader = new FileReader();
 
   reader.onload = (e) => {
@@ -102,6 +144,49 @@ function handleFiles(files) {
   };
 
   reader.readAsText(file);
+}
+
+/**
+ * Show an overlay progress bar while a file is being parsed.
+ * Returns { update(pct, text), remove() }.
+ */
+function showLoadingProgress(name, size) {
+  const overlay = document.createElement('div');
+  overlay.className = 'loading-overlay';
+
+  const box = document.createElement('div');
+  box.className = 'loading-box';
+
+  const title = document.createElement('div');
+  title.className = 'loading-title';
+  title.textContent = `Loading ${name} (${formatSize(size)})`;
+  box.appendChild(title);
+
+  const barOuter = document.createElement('div');
+  barOuter.className = 'loading-bar-outer';
+  const barInner = document.createElement('div');
+  barInner.className = 'loading-bar-inner';
+  barInner.style.width = '0%';
+  barOuter.appendChild(barInner);
+  box.appendChild(barOuter);
+
+  const status = document.createElement('div');
+  status.className = 'loading-status';
+  status.textContent = 'Starting\u2026';
+  box.appendChild(status);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  return {
+    update(pct, text) {
+      barInner.style.width = `${pct}%`;
+      status.textContent = text;
+    },
+    remove() {
+      overlay.remove();
+    },
+  };
 }
 
 function loadEntries(entries, name, size, truncated) {
@@ -362,38 +447,8 @@ function showContentViewer(title, text) {
   const body = document.createElement('div');
   body.className = 'content-viewer-body';
 
-  // Render content with markdown formatting + plain text toggle
-  const wrapper = document.createElement('div');
-  wrapper.className = 'md-toggle-wrapper';
-
-  const toggleBtn = document.createElement('button');
-  toggleBtn.className = 'md-toggle-btn';
-  toggleBtn.textContent = 'Formatted';
-  toggleBtn.title = 'Toggle between formatted and plain text';
-
-  const mdView = renderMarkdownContent(text);
-  mdView.classList.add('hidden');
-  const plainView = document.createElement('pre');
-  plainView.className = 'plain-text-view';
-  plainView.textContent = text;
-
-  toggleBtn.addEventListener('click', () => {
-    const showingPlain = !plainView.classList.contains('hidden');
-    if (showingPlain) {
-      plainView.classList.add('hidden');
-      mdView.classList.remove('hidden');
-      toggleBtn.textContent = 'Plain Text';
-    } else {
-      mdView.classList.add('hidden');
-      plainView.classList.remove('hidden');
-      toggleBtn.textContent = 'Formatted';
-    }
-  });
-
-  wrapper.appendChild(toggleBtn);
-  wrapper.appendChild(mdView);
-  wrapper.appendChild(plainView);
-  body.appendChild(wrapper);
+  // Render content with lazy markdown/plain text toggle
+  body.appendChild(createLazyToggleWrapper(text, 'Formatted'));
 
   viewer.appendChild(header);
   viewer.appendChild(body);

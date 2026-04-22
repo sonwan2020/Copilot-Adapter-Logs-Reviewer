@@ -68,6 +68,66 @@ function createJsonView(obj) {
 }
 
 /**
+ * Create a markdown/plain text toggle wrapper with lazy rendering.
+ * Only the plain text view is created initially; the markdown view
+ * is built on first toggle to avoid expensive DOM tree creation upfront.
+ *
+ * @param {string} text - Raw text content
+ * @param {string} initialBtnText - Initial button label (default: 'Plain Text')
+ * @returns {HTMLElement}
+ */
+export function createLazyToggleWrapper(text, initialBtnText = 'Formatted') {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'md-toggle-wrapper';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'md-toggle-btn';
+  toggleBtn.textContent = initialBtnText;
+  toggleBtn.title = 'Toggle between formatted and plain text';
+  wrapper.appendChild(toggleBtn);
+
+  const plainView = document.createElement('pre');
+  plainView.className = 'plain-text-view';
+  plainView.textContent = text;
+  wrapper.appendChild(plainView);
+
+  let mdView = null;
+
+  toggleBtn.addEventListener('click', () => {
+    const showingPlain = !plainView.classList.contains('hidden');
+    if (showingPlain) {
+      if (!mdView) {
+        mdView = renderMarkdownContent(text);
+        wrapper.appendChild(mdView);
+      }
+      plainView.classList.add('hidden');
+      mdView.classList.remove('hidden');
+      toggleBtn.textContent = 'Plain Text';
+    } else {
+      mdView.classList.add('hidden');
+      plainView.classList.remove('hidden');
+      toggleBtn.textContent = 'Formatted';
+    }
+  });
+
+  return wrapper;
+}
+
+/**
+ * Apply syntax highlighting to a <code> element using highlight.js.
+ * Falls back gracefully if hljs is not loaded.
+ * @param {HTMLElement} codeEl - The <code> element to highlight
+ * @param {string} lang - Language identifier (e.g., 'javascript', 'python')
+ */
+function applyHighlight(codeEl, lang) {
+  if (typeof hljs === 'undefined') return;
+  if (lang) {
+    codeEl.classList.add(`language-${lang}`);
+  }
+  hljs.highlightElement(codeEl);
+}
+
+/**
  * Escape HTML characters.
  */
 function escapeHtml(str) {
@@ -99,7 +159,10 @@ function renderTextContent(text) {
       const pre = document.createElement('pre');
       const codeEl = document.createElement('code');
       codeEl.textContent = code;
-      if (lang) codeEl.dataset.lang = lang;
+      if (lang) {
+        codeEl.dataset.lang = lang;
+        applyHighlight(codeEl, lang);
+      }
       pre.appendChild(codeEl);
       codeBlock.appendChild(pre);
       codeBlock.appendChild(createCopyButton(code));
@@ -138,6 +201,7 @@ export function renderMarkdownContent(text) {
       const code = document.createElement('code');
       code.className = 'md-code lang-json';
       code.textContent = JSON.stringify(parsed, null, 2);
+      applyHighlight(code, 'json');
       pre.appendChild(code);
       container.appendChild(pre);
       return container;
@@ -170,6 +234,7 @@ export function renderMarkdownContent(text) {
       const codeEl = document.createElement('code');
       codeEl.className = `md-code${lang ? ` lang-${lang}` : ''}`;
       codeEl.textContent = code;
+      if (lang) applyHighlight(codeEl, lang);
       pre.appendChild(codeEl);
       wrapper.appendChild(pre);
       container.appendChild(wrapper);
@@ -418,8 +483,11 @@ function renderContentBlock(block, toolUseMap) {
       div.appendChild(inputSection);
     }
 
-    // Collapsible content section (hidden by default)
+    // Collapsible content section (hidden by default, rendered lazily on first expand)
     if (block.content) {
+      // Detect language from linked Read tool input
+      const detectedLang = detectLangFromToolInput(toolName, toolInfo?.input);
+
       const contentHeader = document.createElement('div');
       contentHeader.className = 'tool-result-content-header';
       contentHeader.style.cursor = 'pointer';
@@ -430,121 +498,26 @@ function renderContentBlock(block, toolUseMap) {
       contentHeader.appendChild(toggleIcon);
 
       const contentLabel = document.createElement('span');
-      contentLabel.textContent = 'Content';
+      contentLabel.textContent = detectedLang ? `Content (${detectedLang})` : 'Content';
       contentHeader.appendChild(contentLabel);
       div.appendChild(contentHeader);
 
       const body = document.createElement('div');
       body.className = 'tool-result-body hidden';
+      let bodyRendered = false;
 
       contentHeader.addEventListener('click', () => {
         const isHidden = body.classList.contains('hidden');
+
+        // Lazy render: build body content on first expand
+        if (isHidden && !bodyRendered) {
+          bodyRendered = true;
+          renderToolResultBody(body, block, toolName, toolInfo, toolUseMap, detectedLang);
+        }
+
         body.classList.toggle('hidden');
         toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
       });
-
-      const contentBlocks = normalizeContent(block.content);
-      for (const cb of contentBlocks) {
-        if (cb.type === 'text') {
-          const rawText = cb.text || '';
-          const trimmedText = rawText.trim();
-
-          // Try to detect if content is JSON
-          if ((trimmedText.startsWith('{') || trimmedText.startsWith('[')) && trimmedText.length > 1) {
-            try {
-              const parsed = JSON.parse(trimmedText);
-              body.appendChild(createJsonView(parsed));
-              continue;
-            } catch {
-              // Not valid JSON, fall through
-            }
-          }
-
-          // Detect file extension from linked Read tool input for syntax highlighting
-          const lang = detectLangFromToolInput(toolName, toolInfo?.input);
-          if (lang) {
-            // Render as syntax-highlighted code block
-            const wrapper = document.createElement('div');
-            wrapper.className = 'md-toggle-wrapper';
-
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = 'md-toggle-btn';
-            toggleBtn.textContent = 'Plain Text';
-            toggleBtn.title = 'Toggle between formatted and plain text';
-
-            const codeWrapper = document.createElement('div');
-            codeWrapper.className = 'md-code-wrapper';
-            const langLabel = document.createElement('span');
-            langLabel.className = 'md-code-lang';
-            langLabel.textContent = lang;
-            codeWrapper.appendChild(langLabel);
-            const pre = document.createElement('pre');
-            pre.className = 'md-code-block';
-            const codeEl = document.createElement('code');
-            codeEl.className = `md-code lang-${lang}`;
-            codeEl.textContent = rawText;
-            pre.appendChild(codeEl);
-            codeWrapper.appendChild(pre);
-
-            const plainView = document.createElement('pre');
-            plainView.className = 'plain-text-view hidden';
-            plainView.textContent = rawText;
-
-            toggleBtn.addEventListener('click', () => {
-              const showingCode = !codeWrapper.classList.contains('hidden');
-              if (showingCode) {
-                codeWrapper.classList.add('hidden');
-                plainView.classList.remove('hidden');
-                toggleBtn.textContent = 'Formatted';
-              } else {
-                plainView.classList.add('hidden');
-                codeWrapper.classList.remove('hidden');
-                toggleBtn.textContent = 'Plain Text';
-              }
-            });
-
-            wrapper.appendChild(toggleBtn);
-            wrapper.appendChild(codeWrapper);
-            wrapper.appendChild(plainView);
-            body.appendChild(wrapper);
-          } else {
-            // Default: render as markdown with plain text toggle
-            const wrapper = document.createElement('div');
-            wrapper.className = 'md-toggle-wrapper';
-
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = 'md-toggle-btn';
-            toggleBtn.textContent = 'Plain Text';
-            toggleBtn.title = 'Toggle between formatted and plain text';
-
-            const mdView = renderMarkdownContent(rawText);
-            mdView.classList.add('hidden');
-            const plainView = document.createElement('pre');
-            plainView.className = 'plain-text-view';
-            plainView.textContent = rawText;
-
-            toggleBtn.addEventListener('click', () => {
-              const showingPlain = !plainView.classList.contains('hidden');
-              if (showingPlain) {
-                plainView.classList.add('hidden');
-                mdView.classList.remove('hidden');
-                toggleBtn.textContent = 'Plain Text';
-              } else {
-                mdView.classList.add('hidden');
-                plainView.classList.remove('hidden');
-                toggleBtn.textContent = 'Formatted';
-              }
-            });
-
-            wrapper.appendChild(toggleBtn);
-            wrapper.appendChild(mdView);
-            wrapper.appendChild(plainView);
-            body.appendChild(wrapper);
-          }
-        } else {
-          body.appendChild(renderContentBlock(cb, toolUseMap));
-        }
-      }
 
       div.appendChild(body);
     }
@@ -557,6 +530,80 @@ function renderContentBlock(block, toolUseMap) {
   div.className = 'content-block';
   div.appendChild(createJsonView(block));
   return div;
+}
+
+/**
+ * Render the content body of a tool_result block.
+ * Extracted so it can be called lazily on first expand.
+ */
+function renderToolResultBody(body, block, toolName, toolInfo, toolUseMap, detectedLang) {
+  const contentBlocks = normalizeContent(block.content);
+  for (const cb of contentBlocks) {
+    if (cb.type === 'text') {
+      const rawText = cb.text || '';
+      const trimmedText = rawText.trim();
+
+      // Try to detect if content is JSON
+      if ((trimmedText.startsWith('{') || trimmedText.startsWith('[')) && trimmedText.length > 1) {
+        try {
+          const parsed = JSON.parse(trimmedText);
+          body.appendChild(createJsonView(parsed));
+          continue;
+        } catch {
+          // Not valid JSON, fall through
+        }
+      }
+
+      // Use pre-detected language for syntax highlighting
+      if (detectedLang) {
+        // Render as syntax-highlighted code block (no lang label — shown in header)
+        const wrapper = document.createElement('div');
+        wrapper.className = 'md-toggle-wrapper';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'md-toggle-btn';
+        toggleBtn.textContent = 'Plain Text';
+        toggleBtn.title = 'Toggle between formatted and plain text';
+
+        const codeWrapper = document.createElement('div');
+        codeWrapper.className = 'md-code-wrapper';
+        const pre = document.createElement('pre');
+        pre.className = 'md-code-block';
+        const codeEl = document.createElement('code');
+        codeEl.className = `md-code lang-${detectedLang}`;
+        codeEl.textContent = rawText;
+        applyHighlight(codeEl, detectedLang);
+        pre.appendChild(codeEl);
+        codeWrapper.appendChild(pre);
+
+        const plainView = document.createElement('pre');
+        plainView.className = 'plain-text-view hidden';
+        plainView.textContent = rawText;
+
+        toggleBtn.addEventListener('click', () => {
+          const showingCode = !codeWrapper.classList.contains('hidden');
+          if (showingCode) {
+            codeWrapper.classList.add('hidden');
+            plainView.classList.remove('hidden');
+            toggleBtn.textContent = 'Formatted';
+          } else {
+            plainView.classList.add('hidden');
+            codeWrapper.classList.remove('hidden');
+            toggleBtn.textContent = 'Plain Text';
+          }
+        });
+
+        wrapper.appendChild(toggleBtn);
+        wrapper.appendChild(codeWrapper);
+        wrapper.appendChild(plainView);
+        body.appendChild(wrapper);
+      } else {
+        body.appendChild(createLazyToggleWrapper(rawText));
+      }
+    } else {
+      body.appendChild(renderContentBlock(cb, toolUseMap));
+    }
+  }
 }
 
 /**
@@ -690,160 +737,104 @@ export function renderMessagesTab(entry) {
 
     const body = document.createElement('div');
     body.className = 'message-body hidden';
+    let bodyRendered = false;
 
     header.addEventListener('click', () => {
       const isHidden = body.classList.contains('hidden');
+
+      // Lazy render: build message body on first expand
+      if (isHidden && !bodyRendered) {
+        bodyRendered = true;
+        renderMessageBody(body, msg, blocks, toolUseMap);
+      }
+
       body.classList.toggle('hidden');
       toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
       previewSpan.classList.toggle('hidden', isHidden);
     });
-
-    // Pre-process blocks: group all thinking blocks together, skip empty text blocks
-    const processedBlocks = [];
-    // First pass: collect all thinking texts and non-empty non-thinking blocks
-    const thinkingTexts = [];
-    let thinkingInserted = false;
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i];
-      // Skip empty text blocks
-      if (block.type === 'text' && (!block.text || !block.text.trim())) continue;
-      // Collect all thinking blocks into one group
-      if (block.type === 'thinking') {
-        if (block.thinking) thinkingTexts.push(block.thinking);
-        continue;
-      }
-      // Insert the thinking group before the first non-thinking block
-      if (!thinkingInserted && thinkingTexts.length > 0) {
-        processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
-        thinkingInserted = true;
-      }
-      processedBlocks.push(block);
-    }
-    // If only thinking blocks (no other blocks after), insert at end
-    if (!thinkingInserted && thinkingTexts.length > 0) {
-      processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
-    }
-
-    for (const block of processedBlocks) {
-      if (block.type === '_thinking_group') {
-        // Render grouped thinking as a collapsible section
-        const thinkDiv = document.createElement('div');
-        thinkDiv.className = 'thinking-block';
-
-        const thinkHeader = document.createElement('div');
-        thinkHeader.className = 'thinking-header';
-        thinkHeader.style.cursor = 'pointer';
-
-        const thinkIcon = document.createElement('span');
-        thinkIcon.className = 'tool-result-toggle-icon';
-        thinkIcon.textContent = '\u25B6';
-        thinkHeader.appendChild(thinkIcon);
-
-        const thinkLabel = document.createElement('span');
-        thinkLabel.textContent = 'Thinking';
-        thinkHeader.appendChild(thinkLabel);
-        thinkDiv.appendChild(thinkHeader);
-
-        const thinkBody = document.createElement('div');
-        thinkBody.className = 'thinking-body hidden';
-
-        // Markdown with plain text toggle
-        const wrapper = document.createElement('div');
-        wrapper.className = 'md-toggle-wrapper';
-
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'md-toggle-btn';
-        toggleBtn.textContent = 'Plain Text';
-        toggleBtn.title = 'Toggle between formatted and plain text';
-
-        const mdView = renderMarkdownContent(block.text);
-        mdView.classList.add('hidden');
-        const plainView = document.createElement('pre');
-        plainView.className = 'plain-text-view';
-        plainView.textContent = block.text;
-
-        toggleBtn.addEventListener('click', () => {
-          const showingPlain = !plainView.classList.contains('hidden');
-          if (showingPlain) {
-            plainView.classList.add('hidden');
-            mdView.classList.remove('hidden');
-            toggleBtn.textContent = 'Plain Text';
-          } else {
-            mdView.classList.add('hidden');
-            plainView.classList.remove('hidden');
-            toggleBtn.textContent = 'Formatted';
-          }
-        });
-
-        wrapper.appendChild(toggleBtn);
-        wrapper.appendChild(mdView);
-        wrapper.appendChild(plainView);
-        thinkBody.appendChild(wrapper);
-
-        thinkHeader.addEventListener('click', () => {
-          const isHidden = thinkBody.classList.contains('hidden');
-          thinkBody.classList.toggle('hidden');
-          thinkIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
-        });
-
-        thinkDiv.appendChild(thinkBody);
-        body.appendChild(thinkDiv);
-      } else if (block.type === 'text' && msg.role === 'user') {
-        // Render user messages with full markdown formatting + plain text toggle
-        const rawText = block.text || '';
-        const wrapper = document.createElement('div');
-        wrapper.className = 'md-toggle-wrapper';
-
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'md-toggle-btn';
-        toggleBtn.textContent = 'Plain Text';
-        toggleBtn.title = 'Toggle between formatted and plain text';
-
-        const mdView = renderMarkdownContent(rawText);
-        mdView.classList.add('hidden');
-        const plainView = document.createElement('pre');
-        plainView.className = 'plain-text-view';
-        plainView.textContent = rawText;
-
-        toggleBtn.addEventListener('click', () => {
-          const showingPlain = !plainView.classList.contains('hidden');
-          if (showingPlain) {
-            plainView.classList.add('hidden');
-            mdView.classList.remove('hidden');
-            toggleBtn.textContent = 'Plain Text';
-          } else {
-            mdView.classList.add('hidden');
-            plainView.classList.remove('hidden');
-            toggleBtn.textContent = 'Formatted';
-          }
-        });
-
-        wrapper.appendChild(toggleBtn);
-        wrapper.appendChild(mdView);
-        wrapper.appendChild(plainView);
-        body.appendChild(wrapper);
-      } else {
-        body.appendChild(renderContentBlock(block, toolUseMap));
-      }
-    }
 
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
     container.appendChild(msgDiv);
   }
 
-  // Expand the last message by default
+  // Expand the last message by default (triggers lazy render)
   const lastMsg = container.lastElementChild;
   if (lastMsg) {
-    const lastBody = lastMsg.querySelector('.message-body');
-    const lastPreview = lastMsg.querySelector('.message-preview');
-    const lastIcon = lastMsg.querySelector('.message-toggle-icon');
-    if (lastBody) lastBody.classList.remove('hidden');
-    if (lastPreview) lastPreview.classList.add('hidden');
-    if (lastIcon) lastIcon.textContent = '\u25BC';
+    const lastHeader = lastMsg.querySelector('.message-header');
+    if (lastHeader) lastHeader.click();
   }
 
   return container;
+}
+
+/**
+ * Render the body content of a single message.
+ * Called lazily on first expand to avoid building DOM for collapsed messages.
+ */
+function renderMessageBody(body, msg, blocks, toolUseMap) {
+  // Pre-process blocks: group all thinking blocks together, skip empty text blocks
+  const processedBlocks = [];
+  const thinkingTexts = [];
+  let thinkingInserted = false;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (block.type === 'text' && (!block.text || !block.text.trim())) continue;
+    if (block.type === 'thinking') {
+      if (block.thinking) thinkingTexts.push(block.thinking);
+      continue;
+    }
+    if (!thinkingInserted && thinkingTexts.length > 0) {
+      processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
+      thinkingInserted = true;
+    }
+    processedBlocks.push(block);
+  }
+  if (!thinkingInserted && thinkingTexts.length > 0) {
+    processedBlocks.push({ type: '_thinking_group', text: thinkingTexts.join('') });
+  }
+
+  for (const block of processedBlocks) {
+    if (block.type === '_thinking_group') {
+      const thinkDiv = document.createElement('div');
+      thinkDiv.className = 'thinking-block';
+
+      const thinkHeader = document.createElement('div');
+      thinkHeader.className = 'thinking-header';
+      thinkHeader.style.cursor = 'pointer';
+
+      const thinkIcon = document.createElement('span');
+      thinkIcon.className = 'tool-result-toggle-icon';
+      thinkIcon.textContent = '\u25B6';
+      thinkHeader.appendChild(thinkIcon);
+
+      const thinkLabel = document.createElement('span');
+      thinkLabel.textContent = 'Thinking';
+      thinkHeader.appendChild(thinkLabel);
+      thinkDiv.appendChild(thinkHeader);
+
+      const thinkBody = document.createElement('div');
+      thinkBody.className = 'thinking-body hidden';
+      let thinkRendered = false;
+
+      thinkHeader.addEventListener('click', () => {
+        const isHidden = thinkBody.classList.contains('hidden');
+        if (isHidden && !thinkRendered) {
+          thinkRendered = true;
+          thinkBody.appendChild(createLazyToggleWrapper(block.text));
+        }
+        thinkBody.classList.toggle('hidden');
+        thinkIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
+      });
+
+      thinkDiv.appendChild(thinkBody);
+      body.appendChild(thinkDiv);
+    } else if (block.type === 'text' && msg.role === 'user') {
+      body.appendChild(createLazyToggleWrapper(block.text || ''));
+    } else {
+      body.appendChild(renderContentBlock(block, toolUseMap));
+    }
+  }
 }
 
 /**
@@ -861,7 +852,6 @@ export function renderSystemTab(entry) {
   system.forEach((s, i) => {
     const details = document.createElement('details');
     details.className = 'collapsible';
-    if (i === 0) details.open = true;
 
     const summary = document.createElement('summary');
     const text = s.text || s.content || JSON.stringify(s);
@@ -875,38 +865,15 @@ export function renderSystemTab(entry) {
 
     const content = document.createElement('div');
     content.className = 'collapsible-content';
+    let contentRendered = false;
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'md-toggle-wrapper';
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'md-toggle-btn';
-    toggleBtn.textContent = 'Plain Text';
-    toggleBtn.title = 'Toggle between formatted and plain text';
-
-    const mdView = renderMarkdownContent(text);
-    mdView.classList.add('hidden');
-    const plainView = document.createElement('pre');
-    plainView.className = 'plain-text-view';
-    plainView.textContent = text;
-
-    toggleBtn.addEventListener('click', () => {
-      const showingPlain = !plainView.classList.contains('hidden');
-      if (showingPlain) {
-        plainView.classList.add('hidden');
-        mdView.classList.remove('hidden');
-        toggleBtn.textContent = 'Plain Text';
-      } else {
-        mdView.classList.add('hidden');
-        plainView.classList.remove('hidden');
-        toggleBtn.textContent = 'Formatted';
+    // Lazy render: build content on first expand
+    details.addEventListener('toggle', () => {
+      if (details.open && !contentRendered) {
+        contentRendered = true;
+        content.appendChild(createLazyToggleWrapper(text));
       }
     });
-
-    wrapper.appendChild(toggleBtn);
-    wrapper.appendChild(mdView);
-    wrapper.appendChild(plainView);
-    content.appendChild(wrapper);
 
     details.appendChild(summary);
     details.appendChild(content);
@@ -948,58 +915,41 @@ export function renderToolsTab(entry, searchTerm = '') {
 
     const content = document.createElement('div');
     content.className = 'tool-card-content';
+    let toolContentRendered = false;
 
-    if (tool.description) {
-      const desc = document.createElement('div');
-      desc.style.marginBottom = '8px';
+    // Lazy render: build description + schema on first expand
+    function renderToolContent() {
+      if (toolContentRendered) return;
+      toolContentRendered = true;
 
-      const wrapper = document.createElement('div');
-      wrapper.className = 'md-toggle-wrapper';
+      if (tool.description) {
+        const desc = document.createElement('div');
+        desc.style.marginBottom = '8px';
+        desc.appendChild(createLazyToggleWrapper(tool.description, 'Formatted'));
+        content.appendChild(desc);
+      }
 
-      const toggleBtn = document.createElement('button');
-      toggleBtn.className = 'md-toggle-btn';
-      toggleBtn.textContent = 'Formatted';
-      toggleBtn.title = 'Toggle between formatted and plain text';
-
-      const mdView = renderMarkdownContent(tool.description);
-      mdView.classList.add('hidden');
-      const plainView = document.createElement('pre');
-      plainView.className = 'plain-text-view';
-      plainView.textContent = tool.description;
-
-      toggleBtn.addEventListener('click', () => {
-        const showingPlain = !plainView.classList.contains('hidden');
-        if (showingPlain) {
-          plainView.classList.add('hidden');
-          mdView.classList.remove('hidden');
-          toggleBtn.textContent = 'Plain Text';
-        } else {
-          mdView.classList.add('hidden');
-          plainView.classList.remove('hidden');
-          toggleBtn.textContent = 'Formatted';
-        }
-      });
-
-      wrapper.appendChild(toggleBtn);
-      wrapper.appendChild(mdView);
-      wrapper.appendChild(plainView);
-      desc.appendChild(wrapper);
-      content.appendChild(desc);
+      if (tool.input_schema) {
+        const schemaDetails = document.createElement('details');
+        schemaDetails.className = 'collapsible';
+        schemaDetails.open = true;
+        const schemaSummary = document.createElement('summary');
+        schemaSummary.textContent = 'Input Schema';
+        schemaDetails.appendChild(schemaSummary);
+        const schemaContent = document.createElement('div');
+        schemaContent.className = 'collapsible-content';
+        schemaContent.appendChild(createJsonView(tool.input_schema));
+        schemaDetails.appendChild(schemaContent);
+        content.appendChild(schemaDetails);
+      }
     }
 
-    if (tool.input_schema) {
-      const schemaDetails = document.createElement('details');
-      schemaDetails.className = 'collapsible';
-      schemaDetails.open = true;
-      const schemaSummary = document.createElement('summary');
-      schemaSummary.textContent = 'Input Schema';
-      schemaDetails.appendChild(schemaSummary);
-      const schemaContent = document.createElement('div');
-      schemaContent.className = 'collapsible-content';
-      schemaContent.appendChild(createJsonView(tool.input_schema));
-      schemaDetails.appendChild(schemaContent);
-      content.appendChild(schemaDetails);
-    }
+    details.addEventListener('toggle', () => {
+      if (details.open) renderToolContent();
+    });
+
+    // If auto-expanded by search, render immediately
+    if (details.open) renderToolContent();
 
     details.appendChild(summary);
     details.appendChild(content);
@@ -1214,37 +1164,7 @@ export function renderResponseTab(entry) {
   contentSection.appendChild(contentTitle);
 
   if (parsed.content) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'md-toggle-wrapper';
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'md-toggle-btn';
-    toggleBtn.textContent = 'Plain Text';
-    toggleBtn.title = 'Toggle between formatted and plain text';
-
-    const mdView = renderMarkdownContent(parsed.content);
-    mdView.classList.add('hidden');
-    const plainView = document.createElement('pre');
-    plainView.className = 'plain-text-view';
-    plainView.textContent = parsed.content;
-
-    toggleBtn.addEventListener('click', () => {
-      const showingPlain = !plainView.classList.contains('hidden');
-      if (showingPlain) {
-        plainView.classList.add('hidden');
-        mdView.classList.remove('hidden');
-        toggleBtn.textContent = 'Plain Text';
-      } else {
-        mdView.classList.add('hidden');
-        plainView.classList.remove('hidden');
-        toggleBtn.textContent = 'Formatted';
-      }
-    });
-
-    wrapper.appendChild(toggleBtn);
-    wrapper.appendChild(mdView);
-    wrapper.appendChild(plainView);
-    contentSection.appendChild(wrapper);
+    contentSection.appendChild(createLazyToggleWrapper(parsed.content));
   } else {
     const empty = document.createElement('div');
     empty.style.color = 'var(--text-muted)';
