@@ -368,10 +368,9 @@ function selectEntry(index) {
   } else {
     state.searchMatches = [];
     state.searchMatchIndex = -1;
-    setActiveTab('messages');
+    // Preserve current tab when switching entries; default to 'messages' on first selection
+    setActiveTab(state.activeTab || 'messages');
     updateSearchNav();
-    // Scroll to bottom of tab content
-    tabContent.scrollTop = tabContent.scrollHeight;
   }
 
   // Update active entry in sidebar
@@ -388,6 +387,14 @@ function renderActiveTab() {
   switch (state.activeTab) {
     case 'messages':
       tabContent.appendChild(renderMessagesTab(entry));
+      // Scroll to the last user message
+      {
+        const userMsgs = tabContent.querySelectorAll('.message.user');
+        const lastUser = userMsgs[userMsgs.length - 1];
+        if (lastUser) {
+          requestAnimationFrame(() => lastUser.scrollIntoView({ block: 'start' }));
+        }
+      }
       break;
     case 'system':
       tabContent.appendChild(renderSystemTab(entry));
@@ -441,7 +448,10 @@ function showContentViewer(title, text) {
   const closeBtn = document.createElement('button');
   closeBtn.className = 'content-viewer-close';
   closeBtn.textContent = '\u00d7';
-  closeBtn.addEventListener('click', () => overlay.remove());
+  closeBtn.addEventListener('click', () => {
+    overlay.remove();
+    document.removeEventListener('keydown', escHandler);
+  });
   header.appendChild(closeBtn);
 
   const body = document.createElement('div');
@@ -456,7 +466,10 @@ function showContentViewer(title, text) {
 
   // Close on overlay click (outside viewer)
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
   });
 
   // Close on Escape key

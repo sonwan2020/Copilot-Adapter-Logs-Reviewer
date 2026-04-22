@@ -758,11 +758,16 @@ export function renderMessagesTab(entry) {
     container.appendChild(msgDiv);
   }
 
-  // Expand the last message by default (triggers lazy render)
-  const lastMsg = container.lastElementChild;
-  if (lastMsg) {
-    const lastHeader = lastMsg.querySelector('.message-header');
-    if (lastHeader) lastHeader.click();
+  // Expand the last user message by default and scroll to it
+  const allMessages = container.querySelectorAll('.message');
+  let lastUserMsg = null;
+  for (const m of allMessages) {
+    if (m.classList.contains('user')) lastUserMsg = m;
+  }
+  const expandTarget = lastUserMsg || container.lastElementChild;
+  if (expandTarget) {
+    const targetHeader = expandTarget.querySelector('.message-header');
+    if (targetHeader) targetHeader.click();
   }
 
   return container;
@@ -1152,7 +1157,11 @@ function createLinkedJsonView(obj, links) {
  */
 export function renderResponseTab(entry) {
   const container = document.createElement('div');
-  const parsed = parseSSEResponse(entry.copilotResponse);
+  // Cache parsed SSE result to avoid re-parsing on every tab switch
+  if (!entry._parsedResponse) {
+    entry._parsedResponse = parseSSEResponse(entry.copilotResponse);
+  }
+  const parsed = entry._parsedResponse;
 
   // Assembled content (collapsible, expanded by default)
   const contentSection = document.createElement('div');
@@ -1599,11 +1608,15 @@ function renderSseBody(sseBody, parsed, entry, sseToggleBtn) {
 export function renderRawTab(entry) {
   const container = document.createElement('div');
 
-  // Strip internal _index property for display
-  const displayEntry = { ...entry };
-  delete displayEntry._index;
-
-  const jsonText = JSON.stringify(displayEntry, null, 2);
+  // Cache stringified JSON to avoid multi-MB re-serialization on every tab switch
+  if (!entry._rawJson) {
+    const displayEntry = { ...entry };
+    delete displayEntry._index;
+    delete displayEntry._parsedResponse;
+    delete displayEntry._rawJson;
+    entry._rawJson = JSON.stringify(displayEntry, null, 2);
+  }
+  const jsonText = entry._rawJson;
 
   const jsonContainer = document.createElement('div');
   jsonContainer.className = 'json-view-container';
