@@ -51,6 +51,111 @@ export function parseLogFile(text) {
 }
 
 /**
+ * Parse a log file using streaming to minimize memory usage.
+ * Reads the file in chunks via ReadableStream, parses each complete JSONL
+ * line immediately, and discards raw text — never holding the full file in memory.
+ *
+ * @param {File} file - The File object to parse
+ * @param {function} onProgress - Called with { bytesRead, totalBytes } during parsing
+ * @returns {Promise<{ entries: object[], truncated: boolean }>}
+ */
+export async function parseLogFileStreaming(file, onProgress) {
+  const totalBytes = file.size;
+  const entries = [];
+  let lineBuffer = '';
+  let bytesRead = 0;
+  let lastLineFailed = false;
+  let hasContent = false;
+
+  const stream = file.stream();
+  const reader = stream.getReader();
+  const decoder = new TextDecoder('utf-8');
+
+  // Batch progress updates — report at most every 100ms to avoid UI thrashing
+  let lastProgressTime = 0;
+  const PROGRESS_INTERVAL = 100;
+
+  function reportProgress() {
+    if (!onProgress) return;
+    const now = performance.now();
+    if (now - lastProgressTime >= PROGRESS_INTERVAL) {
+      lastProgressTime = now;
+      onProgress({ bytesRead, totalBytes });
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      bytesRead += value.byteLength;
+      const chunk = decoder.decode(value, { stream: true });
+
+      // Append chunk to buffer and extract complete lines
+      lineBuffer += chunk;
+      let newlineIdx;
+      while ((newlineIdx = lineBuffer.indexOf('\n')) !== -1) {
+        const line = lineBuffer.slice(0, newlineIdx).trim();
+        lineBuffer = lineBuffer.slice(newlineIdx + 1);
+
+        if (!line) continue;
+        hasContent = true;
+
+        try {
+          const entry = JSON.parse(line);
+          entry._index = entries.length;
+          entries.push(entry);
+          lastLineFailed = false;
+        } catch {
+          lastLineFailed = true;
+        }
+      }
+
+      reportProgress();
+
+      // Yield to the event loop periodically so the UI stays responsive
+      // (every ~2MB of data processed)
+      if (bytesRead % (2 * 1024 * 1024) < value.byteLength) {
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+
+    // Flush any remaining content in the buffer (last line without trailing newline)
+    const remaining = lineBuffer.trim();
+    if (remaining) {
+      hasContent = true;
+      try {
+        const entry = JSON.parse(remaining);
+        entry._index = entries.length;
+        entries.push(entry);
+        lastLineFailed = false;
+      } catch {
+        lastLineFailed = true;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Final progress report
+  if (onProgress) {
+    onProgress({ bytesRead: totalBytes, totalBytes });
+  }
+
+  if (!hasContent) {
+    throw new Error('Log file is empty.');
+  }
+
+  if (entries.length === 0) {
+    throw new Error('Unable to parse log file. Expected one JSON object per line (JSONL format).');
+  }
+
+  return { entries, truncated: lastLineFailed };
+}
+
+/**
  * Parse SSE response text into assembled content and usage stats.
  * @param {string} sseText - Raw SSE response text
  * @returns {{ content: string, usage: object|null, model: string|null, id: string|null, chunks: object[], deltaRows: object[], finishReason: string|null, hasDone: boolean }}

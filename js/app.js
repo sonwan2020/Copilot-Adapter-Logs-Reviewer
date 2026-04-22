@@ -1,7 +1,7 @@
 /**
  * Main application module - wires everything together.
  */
-import { parseLogFile, formatSize } from './parser.js';
+import { parseLogFile, parseLogFileStreaming, formatSize } from './parser.js';
 import {
   renderEntryList,
   renderDetailHeader,
@@ -86,6 +86,42 @@ function handleFiles(files) {
   if (!files || files.length === 0) return;
 
   const file = files[0]; // Handle first file
+
+  // Use streaming parser for lower memory usage; fall back to FileReader
+  // if the Blob.stream() API is not available.
+  if (typeof file.stream === 'function') {
+    handleFileStreaming(file);
+  } else {
+    handleFileLegacy(file);
+  }
+}
+
+/**
+ * Stream-parse the file in chunks. Shows a progress indicator while loading.
+ * Peak memory ≈ parsed entries only (no full-file string copy).
+ */
+async function handleFileStreaming(file) {
+  const progress = showLoadingProgress(file.name, file.size);
+
+  try {
+    const result = await parseLogFileStreaming(file, ({ bytesRead, totalBytes }) => {
+      const pct = totalBytes > 0 ? Math.round((bytesRead / totalBytes) * 100) : 0;
+      progress.update(pct, `Parsing\u2026 ${formatSize(bytesRead)} / ${formatSize(totalBytes)}`);
+    });
+
+    progress.remove();
+    loadEntries(result.entries, file.name, file.size, result.truncated);
+  } catch (err) {
+    progress.remove();
+    alert(`Error parsing file: ${err.message}`);
+  }
+}
+
+/**
+ * Legacy path: read entire file into a string via FileReader.
+ * Used only when Blob.stream() is unavailable (older browsers).
+ */
+function handleFileLegacy(file) {
   const reader = new FileReader();
 
   reader.onload = (e) => {
@@ -102,6 +138,49 @@ function handleFiles(files) {
   };
 
   reader.readAsText(file);
+}
+
+/**
+ * Show an overlay progress bar while a file is being parsed.
+ * Returns { update(pct, text), remove() }.
+ */
+function showLoadingProgress(name, size) {
+  const overlay = document.createElement('div');
+  overlay.className = 'loading-overlay';
+
+  const box = document.createElement('div');
+  box.className = 'loading-box';
+
+  const title = document.createElement('div');
+  title.className = 'loading-title';
+  title.textContent = `Loading ${name} (${formatSize(size)})`;
+  box.appendChild(title);
+
+  const barOuter = document.createElement('div');
+  barOuter.className = 'loading-bar-outer';
+  const barInner = document.createElement('div');
+  barInner.className = 'loading-bar-inner';
+  barInner.style.width = '0%';
+  barOuter.appendChild(barInner);
+  box.appendChild(barOuter);
+
+  const status = document.createElement('div');
+  status.className = 'loading-status';
+  status.textContent = 'Starting\u2026';
+  box.appendChild(status);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  return {
+    update(pct, text) {
+      barInner.style.width = `${pct}%`;
+      status.textContent = text;
+    },
+    remove() {
+      overlay.remove();
+    },
+  };
 }
 
 function loadEntries(entries, name, size, truncated) {
