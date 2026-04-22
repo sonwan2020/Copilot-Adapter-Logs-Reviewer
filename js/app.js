@@ -491,13 +491,14 @@ function navigateToMatch(index) {
 }
 
 /**
- * Walk visible text nodes in container, find the Nth occurrence of searchTerm, highlight and scroll.
+ * Walk visible text nodes in container, highlight ALL occurrences of searchTerm
+ * with lighter yellow, and the Nth occurrence (current) with bright yellow. Scroll to current.
  */
 function highlightNthMatch(container, searchTerm, n) {
   if (!searchTerm) return;
 
   // Clean up previous highlights
-  container.querySelectorAll('mark.search-highlight').forEach(mark => {
+  container.querySelectorAll('mark.search-highlight, mark.search-highlight-all').forEach(mark => {
     const parent = mark.parentNode;
     parent.replaceChild(document.createTextNode(mark.textContent), mark);
     parent.normalize();
@@ -505,7 +506,8 @@ function highlightNthMatch(container, searchTerm, n) {
 
   const lowerTerm = searchTerm.toLowerCase();
 
-  // Walk all text nodes, skipping hidden elements
+  // First pass: collect all match positions (node + offset) by walking text nodes
+  const allMatches = [];
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       let el = node.parentElement;
@@ -517,48 +519,54 @@ function highlightNthMatch(container, searchTerm, n) {
     },
   });
 
-  let found = 0;
-  let matchNode = null;
-  let matchOffset = -1;
-
   while (walker.nextNode()) {
-    const text = walker.currentNode.textContent.toLowerCase();
+    const textNode = walker.currentNode;
+    const text = textNode.textContent.toLowerCase();
     let pos = 0;
     while ((pos = text.indexOf(lowerTerm, pos)) !== -1) {
-      if (found === n) {
-        matchNode = walker.currentNode;
-        matchOffset = pos;
-        break;
-      }
-      found++;
+      allMatches.push({ node: textNode, offset: pos });
       pos += lowerTerm.length;
     }
-    if (matchNode) break;
   }
 
-  if (!matchNode) return;
+  if (allMatches.length === 0) return;
 
-  // Open any closed <details> ancestors
-  let el = matchNode.parentElement;
-  while (el && el !== container) {
-    if (el.tagName === 'DETAILS' && !el.open) {
-      el.open = true;
+  // Wrap matches in reverse order so earlier offsets stay valid
+  let currentMark = null;
+  for (let i = allMatches.length - 1; i >= 0; i--) {
+    const { node, offset } = allMatches[i];
+    const isCurrent = i === n;
+
+    // Open any closed <details> ancestors for the current match
+    if (isCurrent) {
+      let el = node.parentElement;
+      while (el && el !== container) {
+        if (el.tagName === 'DETAILS' && !el.open) {
+          el.open = true;
+        }
+        el = el.parentElement;
+      }
     }
-    el = el.parentElement;
+
+    const range = document.createRange();
+    range.setStart(node, offset);
+    range.setEnd(node, offset + searchTerm.length);
+
+    const mark = document.createElement('mark');
+    mark.className = isCurrent ? 'search-highlight' : 'search-highlight-all';
+    range.surroundContents(mark);
+
+    if (isCurrent) {
+      currentMark = mark;
+    }
   }
 
-  // Wrap the match in a <mark>
-  const range = document.createRange();
-  range.setStart(matchNode, matchOffset);
-  range.setEnd(matchNode, matchOffset + searchTerm.length);
-
-  const mark = document.createElement('mark');
-  mark.className = 'search-highlight';
-  range.surroundContents(mark);
-
-  requestAnimationFrame(() => {
-    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
+  // Scroll to the current match
+  if (currentMark) {
+    requestAnimationFrame(() => {
+      currentMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
 }
 
 /**
