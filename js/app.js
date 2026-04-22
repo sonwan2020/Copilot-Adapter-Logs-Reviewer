@@ -270,6 +270,12 @@ function selectEntry(index) {
     renderActiveTab();
   }
 
+  // Scroll to first search match in the rendered tab content
+  const activeSearchVal = searchInput.value.trim();
+  if (activeSearchVal) {
+    scrollToFirstMatch(tabContent, activeSearchVal);
+  }
+
   // Update active entry in sidebar
   updateActiveEntryInList();
 }
@@ -392,6 +398,71 @@ function showContentViewer(title, text) {
   document.addEventListener('keydown', escHandler);
 
   document.body.appendChild(overlay);
+}
+
+// ===== Search Scroll-to-Match =====
+function scrollToFirstMatch(container, searchTerm) {
+  if (!searchTerm) return;
+
+  // Clean up previous highlights
+  container.querySelectorAll('mark.search-highlight').forEach(mark => {
+    const parent = mark.parentNode;
+    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+    parent.normalize();
+  });
+
+  const lowerTerm = searchTerm.toLowerCase();
+
+  // Walk all text nodes, skipping hidden elements
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      // Skip text inside hidden elements (markdown/plain-text toggle)
+      let el = node.parentElement;
+      while (el && el !== container) {
+        if (el.classList.contains('hidden')) return NodeFilter.FILTER_REJECT;
+        el = el.parentElement;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  let matchNode = null;
+  let matchOffset = -1;
+
+  while (walker.nextNode()) {
+    const text = walker.currentNode.textContent.toLowerCase();
+    const idx = text.indexOf(lowerTerm);
+    if (idx !== -1) {
+      matchNode = walker.currentNode;
+      matchOffset = idx;
+      break;
+    }
+  }
+
+  if (!matchNode) return;
+
+  // Open any closed <details> ancestors so the match is visible
+  let el = matchNode.parentElement;
+  while (el && el !== container) {
+    if (el.tagName === 'DETAILS' && !el.open) {
+      el.open = true;
+    }
+    el = el.parentElement;
+  }
+
+  // Wrap the match in a <mark> using Range API
+  const range = document.createRange();
+  range.setStart(matchNode, matchOffset);
+  range.setEnd(matchNode, matchOffset + searchTerm.length);
+
+  const mark = document.createElement('mark');
+  mark.className = 'search-highlight';
+  range.surroundContents(mark);
+
+  // Scroll to the highlight
+  requestAnimationFrame(() => {
+    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 // ===== Drag & Drop =====
