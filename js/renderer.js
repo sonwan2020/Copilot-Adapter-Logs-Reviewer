@@ -1158,16 +1158,21 @@ export function renderResponseTab(entry) {
   const contentSection = document.createElement('div');
   contentSection.className = 'response-content';
 
+  const contentHeader = document.createElement('div');
+  contentHeader.className = 'response-section-header';
+
   const contentTitle = document.createElement('h3');
-  contentTitle.className = 'response-section-header';
   contentTitle.textContent = 'Assembled Response';
-  contentTitle.style.marginBottom = '8px';
-  contentTitle.style.fontSize = '14px';
-  contentTitle.style.cursor = 'pointer';
-  contentSection.appendChild(contentTitle);
+  contentHeader.appendChild(contentTitle);
+
+  const contentArrow = document.createElement('span');
+  contentArrow.className = 'response-section-arrow';
+  contentArrow.textContent = '\u25BC';
+  contentHeader.appendChild(contentArrow);
+
+  contentSection.appendChild(contentHeader);
 
   const contentBody = document.createElement('div');
-  contentBody.style.marginTop = '8px';
 
   if (parsed.content) {
     contentBody.appendChild(createLazyToggleWrapper(parsed.content));
@@ -1178,20 +1183,45 @@ export function renderResponseTab(entry) {
     contentBody.appendChild(empty);
   }
 
-  contentTitle.addEventListener('click', () => {
+  contentHeader.addEventListener('click', () => {
+    const isHidden = contentBody.classList.contains('hidden');
     contentBody.classList.toggle('hidden');
+    contentArrow.textContent = isHidden ? '\u25BC' : '\u25B6';
   });
 
   contentSection.appendChild(contentBody);
   container.appendChild(contentSection);
 
-  // Usage stats
+  // Usage stats (collapsible, expanded by default)
   if (parsed.usage) {
+    const usageSection = document.createElement('div');
+    usageSection.style.marginBottom = '16px';
+
+    const usageHeader = document.createElement('div');
+    usageHeader.className = 'response-section-header';
+
     const usageTitle = document.createElement('h3');
     usageTitle.textContent = 'Usage Statistics';
-    usageTitle.style.marginBottom = '8px';
-    usageTitle.style.fontSize = '14px';
-    container.appendChild(usageTitle);
+    usageHeader.appendChild(usageTitle);
+
+    const usageArrow = document.createElement('span');
+    usageArrow.className = 'response-section-arrow';
+    usageArrow.textContent = '\u25BC';
+    usageHeader.appendChild(usageArrow);
+
+    usageSection.appendChild(usageHeader);
+
+    const usageBody = document.createElement('div');
+
+    // Response model (shown before the table)
+    if (parsed.model) {
+      const modelInfo = document.createElement('div');
+      modelInfo.style.fontSize = '20px';
+      modelInfo.style.marginBottom = '8px';
+      modelInfo.style.color = 'var(--text-secondary)';
+      modelInfo.innerHTML = `Response Model: <strong style="color:var(--text-primary)">${escapeHtml(parsed.model)}</strong>`;
+      usageBody.appendChild(modelInfo);
+    }
 
     const table = document.createElement('table');
     table.className = 'usage-table';
@@ -1215,17 +1245,16 @@ export function renderResponseTab(entry) {
       row.innerHTML = `<td class="usage-table-label">${escapeHtml(label)}</td><td class="usage-table-value">${Number(value).toLocaleString()}</td>`;
       table.appendChild(row);
     }
-    container.appendChild(table);
-  }
+    usageBody.appendChild(table);
 
-  // Response model
-  if (parsed.model) {
-    const modelInfo = document.createElement('div');
-    modelInfo.style.marginTop = '12px';
-    modelInfo.style.fontSize = '13px';
-    modelInfo.style.color = 'var(--text-secondary)';
-    modelInfo.textContent = `Response Model: ${parsed.model}`;
-    container.appendChild(modelInfo);
+    usageHeader.addEventListener('click', () => {
+      const isHidden = usageBody.classList.contains('hidden');
+      usageBody.classList.toggle('hidden');
+      usageArrow.textContent = isHidden ? '\u25BC' : '\u25B6';
+    });
+
+    usageSection.appendChild(usageBody);
+    container.appendChild(usageSection);
   }
 
   // SSE Response section with formatted/raw toggle (collapsible, expanded by default)
@@ -1234,31 +1263,37 @@ export function renderResponseTab(entry) {
     sseSection.style.marginTop = '16px';
 
     const sseHeader = document.createElement('div');
-    sseHeader.style.display = 'flex';
-    sseHeader.style.alignItems = 'center';
-    sseHeader.style.gap = '8px';
-    sseHeader.style.marginBottom = '8px';
+    sseHeader.className = 'response-section-header';
 
     const sseTitle = document.createElement('h3');
     sseTitle.textContent = 'SSE Response';
-    sseTitle.style.fontSize = '14px';
-    sseTitle.style.margin = '0';
-    sseTitle.style.cursor = 'pointer';
     sseHeader.appendChild(sseTitle);
+
+    const sseRight = document.createElement('div');
+    sseRight.className = 'response-section-header-right';
+
+    const sseArrow = document.createElement('span');
+    sseArrow.className = 'response-section-arrow';
+    sseArrow.textContent = '\u25BC';
+    sseRight.appendChild(sseArrow);
 
     const sseToggleBtn = document.createElement('button');
     sseToggleBtn.className = 'sse-toggle-btn';
     sseToggleBtn.textContent = 'Raw';
     sseToggleBtn.title = 'Toggle between formatted and raw SSE';
-    sseHeader.appendChild(sseToggleBtn);
+    sseToggleBtn.addEventListener('click', (e) => e.stopPropagation());
+    sseRight.appendChild(sseToggleBtn);
 
+    sseHeader.appendChild(sseRight);
     sseSection.appendChild(sseHeader);
 
     const sseBody = document.createElement('div');
     renderSseBody(sseBody, parsed, entry, sseToggleBtn);
 
-    sseTitle.addEventListener('click', () => {
+    sseHeader.addEventListener('click', () => {
+      const isHidden = sseBody.classList.contains('hidden');
       sseBody.classList.toggle('hidden');
+      sseArrow.textContent = isHidden ? '\u25BC' : '\u25B6';
     });
 
     sseSection.appendChild(sseBody);
@@ -1295,7 +1330,14 @@ function renderSseBody(sseBody, parsed, entry, sseToggleBtn) {
 
       for (const { label, value } of metaItems) {
         const row = document.createElement('tr');
-        row.innerHTML = `<td class="usage-table-label">${escapeHtml(label)}</td><td class="usage-table-value usage-table-value-left">${escapeHtml(String(value))}</td>`;
+        const labelTd = document.createElement('td');
+        labelTd.className = 'usage-table-label';
+        labelTd.textContent = label;
+        const valueTd = document.createElement('td');
+        valueTd.className = 'usage-table-value sse-meta-value';
+        valueTd.textContent = String(value);
+        row.appendChild(labelTd);
+        row.appendChild(valueTd);
         metaTable.appendChild(row);
       }
       formattedView.appendChild(metaTable);

@@ -633,7 +633,6 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  user-select: none;
 }
 
 .tool-result-toggle-icon {
@@ -846,9 +845,7 @@ html, body {
   color: var(--text-primary);
 }
 
-.usage-table-value.usage-table-value-left {
-  font-weight: normal;
-  font-size: 13px;
+.usage-table td.sse-meta-value {
   text-align: left;
 }
 
@@ -860,8 +857,34 @@ html, body {
 .response-section-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-secondary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  margin-bottom: 8px;
+  cursor: pointer;
   user-select: none;
+}
+
+.response-section-header h3 {
+  font-size: 14px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.response-section-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.response-section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 /* ===== SSE Formatted View ===== */
