@@ -1,7 +1,7 @@
 /**
  * Renderer module - creates DOM elements for log entry visualization.
  */
-import { normalizeContent, parseSSEResponse, formatTimestamp, getToolsFromCache, getSystemFromCache } from './parser.js';
+import { normalizeContent, parseSSEResponse, formatTimestamp, getToolsFromCache, getSystemPromptFromCache } from './parser.js';
 
 /**
  * Helper function to get tools from an entry, handling both cached and inline tools.
@@ -26,13 +26,13 @@ function getTools(entry) {
  * @param {object} entry
  * @returns {Array}
  */
-function getSystem(entry) {
+function getSystemPrompt(entry) {
   const req = entry.anthropicRequest;
   if (!req) return [];
 
   // Check if system prompts are cached
-  if (req._systemCacheId) {
-    return getSystemFromCache(req._systemCacheId) || [];
+  if (req._systemPromptCacheId) {
+    return getSystemPromptFromCache(req._systemPromptCacheId) || [];
   }
 
   // Fall back to inline system prompts (for backwards compatibility or if caching failed)
@@ -883,14 +883,14 @@ function renderMessageBody(body, msg, blocks, toolUseMap) {
  */
 export function renderSystemTab(entry) {
   const container = document.createElement('div');
-  const system = getSystem(entry);
+  const systemPrompt = getSystemPrompt(entry);
 
-  if (system.length === 0) {
+  if (systemPrompt.length === 0) {
     container.textContent = 'No system prompts in this entry.';
     return container;
   }
 
-  system.forEach((s, i) => {
+  systemPrompt.forEach((s, i) => {
     const details = document.createElement('details');
     details.className = 'collapsible';
 
@@ -1043,8 +1043,8 @@ export function renderRequestTab(entry, callbacks = {}) {
     });
 
     // Get system prompts from cache if needed
-    const system = getSystem(entry);
-    summary.system = system.map((s, i) => {
+    const systemPrompt = getSystemPrompt(entry);
+    summary.system = systemPrompt.map((s, i) => {
       const text = s.text || s.content || JSON.stringify(s);
       const placeholder = `__LINK_SYS_${i}__`;
       anthropicLinks.push({
@@ -1071,7 +1071,7 @@ export function renderRequestTab(entry, callbacks = {}) {
     summary.tools = toolPlaceholder;
     // Remove cache IDs from display
     delete summary._toolsCacheId;
-    delete summary._systemCacheId;
+    delete summary._systemPromptCacheId;
 
     anthropicCol.appendChild(createLinkedJsonView(summary, anthropicLinks));
   }

@@ -1,7 +1,7 @@
 /**
  * Main application module - wires everything together.
  */
-import { parseLogFile, parseLogFileStreaming, formatSize, getToolsFromCache, getSystemFromCache } from './parser.js';
+import { parseLogFile, parseLogFileStreaming, formatSize, getToolsFromCache, getSystemPromptFromCache } from './parser.js';
 import {
   renderEntryList,
   renderDetailHeader,
@@ -38,13 +38,13 @@ function getTools(entry) {
  * @param {object} entry
  * @returns {Array}
  */
-function getSystem(entry) {
+function getSystemPrompt(entry) {
   const req = entry.anthropicRequest;
   if (!req) return [];
 
   // Check if system prompts are cached
-  if (req._systemCacheId) {
-    return getSystemFromCache(req._systemCacheId) || [];
+  if (req._systemPromptCacheId) {
+    return getSystemPromptFromCache(req._systemPromptCacheId) || [];
   }
 
   // Fall back to inline system prompts (for backwards compatibility or if caching failed)
@@ -321,8 +321,8 @@ function applyFilters() {
       }
 
       // Search system prompts
-      const system = getSystem(entry);
-      const sysFound = system.some(s =>
+      const systemPrompt = getSystemPrompt(entry);
+      const sysFound = systemPrompt.some(s =>
         (s.text || JSON.stringify(s)).toLowerCase().includes(searchVal)
       );
       if (sysFound) {
@@ -391,7 +391,7 @@ function selectEntry(index) {
   renderDetailHeader(entry, detailHeader);
 
   // Update tab counts
-  systemCount.textContent = `(${getSystem(entry).length})`;
+  systemCount.textContent = `(${getSystemPrompt(entry).length})`;
   toolsCount.textContent = `(${getTools(entry).length})`;
 
   // Collect search matches and navigate to first one
@@ -557,9 +557,9 @@ function collectAllMatches(entry, searchTerm) {
   }
 
   // System tab
-  const system = getSystem(entry);
+  const systemPrompt = getSystemPrompt(entry);
   let sysTotal = 0;
-  for (const s of system) {
+  for (const s of systemPrompt) {
     const text = s.text || s.content || JSON.stringify(s);
     sysTotal += countOccurrences(text);
   }
