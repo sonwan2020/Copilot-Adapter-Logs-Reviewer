@@ -1,7 +1,25 @@
 /**
  * Renderer module - creates DOM elements for log entry visualization.
  */
-import { normalizeContent, parseSSEResponse, formatTimestamp } from './parser.js';
+import { normalizeContent, parseSSEResponse, formatTimestamp, getToolsFromCache } from './parser.js';
+
+/**
+ * Helper function to get tools from an entry, handling both cached and inline tools.
+ * @param {object} entry
+ * @returns {Array}
+ */
+function getTools(entry) {
+  const req = entry.anthropicRequest;
+  if (!req) return [];
+
+  // Check if tools are cached
+  if (req._toolsCacheId) {
+    return getToolsFromCache(req._toolsCacheId) || [];
+  }
+
+  // Fall back to inline tools (for backwards compatibility or if caching failed)
+  return req.tools || [];
+}
 
 /**
  * Get a short model label from full model name.
@@ -625,7 +643,7 @@ export function renderEntryList(entries, container, onSelect) {
       : 'N/A';
 
     const msgCount = req.messages?.length || 0;
-    const toolCount = req.tools?.length || 0;
+    const toolCount = getTools(entry).length;
 
     item.innerHTML = `
       <div class="entry-item-header">
@@ -893,7 +911,7 @@ export function renderSystemTab(entry) {
  */
 export function renderToolsTab(entry, searchTerm = '') {
   const container = document.createElement('div');
-  const tools = entry.anthropicRequest?.tools || [];
+  const tools = getTools(entry);
 
   if (tools.length === 0) {
     container.textContent = 'No tools defined in this entry.';
@@ -1019,7 +1037,9 @@ export function renderRequestTab(entry, callbacks = {}) {
       return { type: s.type, text: placeholder, _index: i };
     });
 
-    const toolCount = (summary.tools || []).length;
+    // Get tools from cache if needed
+    const tools = getTools(entry);
+    const toolCount = tools.length;
     const toolPlaceholder = `__LINK_TOOLS__`;
     anthropicLinks.push({
       placeholder: toolPlaceholder,
@@ -1029,6 +1049,8 @@ export function renderRequestTab(entry, callbacks = {}) {
       },
     });
     summary.tools = toolPlaceholder;
+    // Remove cache ID from display
+    delete summary._toolsCacheId;
 
     anthropicCol.appendChild(createLinkedJsonView(summary, anthropicLinks));
   }

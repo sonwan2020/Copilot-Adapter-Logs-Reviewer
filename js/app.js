@@ -1,7 +1,7 @@
 /**
  * Main application module - wires everything together.
  */
-import { parseLogFile, parseLogFileStreaming, formatSize } from './parser.js';
+import { parseLogFile, parseLogFileStreaming, formatSize, getToolsFromCache } from './parser.js';
 import {
   renderEntryList,
   renderDetailHeader,
@@ -14,6 +14,24 @@ import {
   createLazyToggleWrapper,
   modelLabel,
 } from './renderer.js';
+
+/**
+ * Helper function to get tools from an entry, handling both cached and inline tools.
+ * @param {object} entry
+ * @returns {Array}
+ */
+function getTools(entry) {
+  const req = entry.anthropicRequest;
+  if (!req) return [];
+
+  // Check if tools are cached
+  if (req._toolsCacheId) {
+    return getToolsFromCache(req._toolsCacheId) || [];
+  }
+
+  // Fall back to inline tools (for backwards compatibility or if caching failed)
+  return req.tools || [];
+}
 
 // ===== State =====
 let state = {
@@ -130,9 +148,9 @@ async function handleFileStreaming(file) {
 function handleFileLegacy(file) {
   const reader = new FileReader();
 
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
-      const result = parseLogFile(e.target.result);
+      const result = await parseLogFile(e.target.result);
       loadEntries(result.entries, file.name, file.size, result.truncated);
     } catch (err) {
       alert(`Error parsing file: ${err.message}`);
@@ -295,7 +313,7 @@ function applyFilters() {
       }
 
       // Search tools
-      const tools = entry.anthropicRequest?.tools || [];
+      const tools = getTools(entry);
       const toolFound = tools.some(t =>
         (t.name || '').toLowerCase().includes(searchVal) ||
         (t.description || '').toLowerCase().includes(searchVal)
@@ -356,7 +374,7 @@ function selectEntry(index) {
 
   // Update tab counts
   systemCount.textContent = `(${entry.anthropicRequest?.system?.length || 0})`;
-  toolsCount.textContent = `(${entry.anthropicRequest?.tools?.length || 0})`;
+  toolsCount.textContent = `(${getTools(entry).length})`;
 
   // Collect search matches and navigate to first one
   const searchVal = searchInput.value.trim();
@@ -532,7 +550,7 @@ function collectAllMatches(entry, searchTerm) {
   }
 
   // Tools tab
-  const tools = entry.anthropicRequest?.tools || [];
+  const tools = getTools(entry);
   let toolTotal = 0;
   for (const t of tools) {
     toolTotal += countOccurrences(t.name || '');

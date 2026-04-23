@@ -3,17 +3,81 @@
  * Handles JSON parsing (including truncated files) and SSE response parsing.
  */
 
+// Global tools cache: Map<hash, tools array>
+// Deduplicates tool definitions across all entries to reduce memory usage
+const toolsCache = new Map();
+
+/**
+ * Compute a SHA-256 hash for a tools array.
+ * Uses the Web Crypto API to create a secure hash identifier.
+ * @param {Array} tools
+ * @returns {Promise<string>}
+ */
+async function hashTools(tools) {
+  if (!tools || tools.length === 0) return '';
+
+  // Convert tools to JSON string for hashing
+  const str = JSON.stringify(tools);
+
+  // Use Web Crypto API for SHA-256 hashing
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+  // Convert hash to hex string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  return hashHex;
+}
+
+/**
+ * Cache tools array and return a cache ID.
+ * If the same tools array is already cached, returns existing ID.
+ * @param {Array} tools
+ * @returns {Promise<string|null>} - Cache ID or null if no tools
+ */
+async function cacheTools(tools) {
+  if (!tools || tools.length === 0) return null;
+
+  const hash = await hashTools(tools);
+  if (!toolsCache.has(hash)) {
+    toolsCache.set(hash, tools);
+  }
+  return hash;
+}
+
+/**
+ * Retrieve tools from cache by ID.
+ * @param {string} cacheId
+ * @returns {Array|null}
+ */
+export function getToolsFromCache(cacheId) {
+  if (!cacheId) return null;
+  return toolsCache.get(cacheId) || null;
+}
+
+/**
+ * Clear the tools cache. Useful for testing or memory cleanup.
+ */
+export function clearToolsCache() {
+  toolsCache.clear();
+}
+
 /**
  * Parse a log file text into an array of log entries.
  * Expects JSONL format: one valid JSON object per line, no wrapping array.
  * @param {string} text - Raw file content
- * @returns {{ entries: object[], truncated: boolean }}
+ * @returns {Promise<{ entries: object[], truncated: boolean }>}
  */
-export function parseLogFile(text) {
+export async function parseLogFile(text) {
   const trimmed = text.trim();
   if (!trimmed) {
     throw new Error('Log file is empty.');
   }
+
+  // Clear cache at start of new file load
+  clearToolsCache();
 
   // Parse as JSONL: one JSON object per line
   const entries = [];
@@ -26,6 +90,16 @@ export function parseLogFile(text) {
     try {
       const entry = JSON.parse(l);
       entry._index = entries.length;
+
+      // Cache tools and replace with reference
+      if (entry.anthropicRequest?.tools) {
+        const cacheId = await cacheTools(entry.anthropicRequest.tools);
+        if (cacheId) {
+          entry.anthropicRequest._toolsCacheId = cacheId;
+          delete entry.anthropicRequest.tools;
+        }
+      }
+
       entries.push(entry);
     } catch {
       parseErrors++;
@@ -60,6 +134,9 @@ export function parseLogFile(text) {
  * @returns {Promise<{ entries: object[], truncated: boolean }>}
  */
 export async function parseLogFileStreaming(file, onProgress) {
+  // Clear cache at start of new file load
+  clearToolsCache();
+
   const totalBytes = file.size;
   const entries = [];
   let lineBuffer = '';
@@ -106,6 +183,16 @@ export async function parseLogFileStreaming(file, onProgress) {
         try {
           const entry = JSON.parse(line);
           entry._index = entries.length;
+
+          // Cache tools and replace with reference
+          if (entry.anthropicRequest?.tools) {
+            const cacheId = await cacheTools(entry.anthropicRequest.tools);
+            if (cacheId) {
+              entry.anthropicRequest._toolsCacheId = cacheId;
+              delete entry.anthropicRequest.tools;
+            }
+          }
+
           entries.push(entry);
           lastLineFailed = false;
         } catch {
@@ -129,6 +216,16 @@ export async function parseLogFileStreaming(file, onProgress) {
       try {
         const entry = JSON.parse(remaining);
         entry._index = entries.length;
+
+        // Cache tools and replace with reference
+        if (entry.anthropicRequest?.tools) {
+          const cacheId = await cacheTools(entry.anthropicRequest.tools);
+          if (cacheId) {
+            entry.anthropicRequest._toolsCacheId = cacheId;
+            delete entry.anthropicRequest.tools;
+          }
+        }
+
         entries.push(entry);
         lastLineFailed = false;
       } catch {
@@ -273,6 +370,15 @@ export function extractMetadata(entry, index) {
   const req = entry.anthropicRequest || {};
   const parsedResponse = parseSSEResponse(entry.copilotResponse);
 
+  // Get tool count from cache if tools are cached
+  let toolCount = 0;
+  if (req._toolsCacheId) {
+    const tools = getToolsFromCache(req._toolsCacheId);
+    toolCount = tools?.length || 0;
+  } else {
+    toolCount = req.tools?.length || 0;
+  }
+
   return {
     index,
     timestamp: entry.timestamp || null,
@@ -280,7 +386,7 @@ export function extractMetadata(entry, index) {
     streaming: entry.streaming ?? null,
     messageCount: req.messages?.length || 0,
     systemPromptCount: req.system?.length || 0,
-    toolCount: req.tools?.length || 0,
+    toolCount,
     maxTokens: req.max_tokens || null,
     temperature: req.temperature ?? null,
     usage: parsedResponse.usage,
