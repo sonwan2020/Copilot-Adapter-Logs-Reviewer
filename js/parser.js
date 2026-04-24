@@ -7,6 +7,10 @@
 // Deduplicates tool definitions across all entries to reduce memory usage
 const toolsCache = new Map();
 
+// Global system prompt cache: Map<hash, system array>
+// Shared by both Anthropic and OpenAI requests to deduplicate system prompts
+const systemPromptCache = new Map();
+
 /**
  * Compute a SHA-256 hash for a tools array.
  * Uses the Web Crypto API to create a secure hash identifier.
@@ -65,6 +69,60 @@ export function clearToolsCache() {
 }
 
 /**
+ * Compute a SHA-256 hash for a system prompt array.
+ * Uses the Web Crypto API to create a secure hash identifier.
+ * @param {Array} system
+ * @returns {Promise<string>}
+ */
+async function hashSystemPrompt(system) {
+  if (!system || system.length === 0) return '';
+
+  const str = JSON.stringify(system);
+
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  return hashHex;
+}
+
+/**
+ * Cache system prompt array and return a cache ID.
+ * If the same system prompt is already cached, returns existing ID.
+ * @param {Array} system
+ * @returns {Promise<string|null>} - Cache ID or null if no system prompt
+ */
+async function cacheSystemPrompt(system) {
+  if (!system || system.length === 0) return null;
+
+  const hash = await hashSystemPrompt(system);
+  if (!systemPromptCache.has(hash)) {
+    systemPromptCache.set(hash, system);
+  }
+  return hash;
+}
+
+/**
+ * Retrieve system prompt from cache by ID.
+ * @param {string} cacheId
+ * @returns {Array|null}
+ */
+export function getSystemPromptFromCache(cacheId) {
+  if (!cacheId) return null;
+  return systemPromptCache.get(cacheId) || null;
+}
+
+/**
+ * Clear the system prompt cache. Useful for testing or memory cleanup.
+ */
+export function clearSystemPromptCache() {
+  systemPromptCache.clear();
+}
+
+/**
  * Parse a log file text into an array of log entries.
  * Expects JSONL format: one valid JSON object per line, no wrapping array.
  * @param {string} text - Raw file content
@@ -78,6 +136,7 @@ export async function parseLogFile(text) {
 
   // Clear cache at start of new file load
   clearToolsCache();
+  clearSystemPromptCache();
 
   // Parse as JSONL: one JSON object per line
   const entries = [];
@@ -97,6 +156,22 @@ export async function parseLogFile(text) {
         if (cacheId) {
           entry.anthropicRequest._toolsCacheId = cacheId;
           delete entry.anthropicRequest.tools;
+        }
+      }
+
+      // Cache system prompts and replace with reference (shared cache for both request formats)
+      if (entry.anthropicRequest?.system) {
+        const cacheId = await cacheSystemPrompt(entry.anthropicRequest.system);
+        if (cacheId) {
+          entry.anthropicRequest._systemPromptCacheId = cacheId;
+          delete entry.anthropicRequest.system;
+        }
+      }
+      if (entry.openaiRequest?.system) {
+        const cacheId = await cacheSystemPrompt(entry.openaiRequest.system);
+        if (cacheId) {
+          entry.openaiRequest._systemPromptCacheId = cacheId;
+          delete entry.openaiRequest.system;
         }
       }
 
@@ -136,6 +211,7 @@ export async function parseLogFile(text) {
 export async function parseLogFileStreaming(file, onProgress) {
   // Clear cache at start of new file load
   clearToolsCache();
+  clearSystemPromptCache();
 
   const totalBytes = file.size;
   const entries = [];
@@ -193,6 +269,22 @@ export async function parseLogFileStreaming(file, onProgress) {
             }
           }
 
+          // Cache system prompts and replace with reference (shared cache for both request formats)
+          if (entry.anthropicRequest?.system) {
+            const cacheId = await cacheSystemPrompt(entry.anthropicRequest.system);
+            if (cacheId) {
+              entry.anthropicRequest._systemPromptCacheId = cacheId;
+              delete entry.anthropicRequest.system;
+            }
+          }
+          if (entry.openaiRequest?.system) {
+            const cacheId = await cacheSystemPrompt(entry.openaiRequest.system);
+            if (cacheId) {
+              entry.openaiRequest._systemPromptCacheId = cacheId;
+              delete entry.openaiRequest.system;
+            }
+          }
+
           entries.push(entry);
           lastLineFailed = false;
         } catch {
@@ -223,6 +315,22 @@ export async function parseLogFileStreaming(file, onProgress) {
           if (cacheId) {
             entry.anthropicRequest._toolsCacheId = cacheId;
             delete entry.anthropicRequest.tools;
+          }
+        }
+
+        // Cache system prompts and replace with reference (shared cache for both request formats)
+        if (entry.anthropicRequest?.system) {
+          const cacheId = await cacheSystemPrompt(entry.anthropicRequest.system);
+          if (cacheId) {
+            entry.anthropicRequest._systemPromptCacheId = cacheId;
+            delete entry.anthropicRequest.system;
+          }
+        }
+        if (entry.openaiRequest?.system) {
+          const cacheId = await cacheSystemPrompt(entry.openaiRequest.system);
+          if (cacheId) {
+            entry.openaiRequest._systemPromptCacheId = cacheId;
+            delete entry.openaiRequest.system;
           }
         }
 
@@ -385,7 +493,9 @@ export function extractMetadata(entry, index) {
     model: req.model || 'unknown',
     streaming: entry.streaming ?? null,
     messageCount: req.messages?.length || 0,
-    systemPromptCount: req.system?.length || 0,
+    systemPromptCount: (req._systemPromptCacheId
+      ? getSystemPromptFromCache(req._systemPromptCacheId)?.length
+      : req.system?.length) || 0,
     toolCount,
     maxTokens: req.max_tokens || null,
     temperature: req.temperature ?? null,

@@ -1,7 +1,7 @@
 /**
  * Main application module - wires everything together.
  */
-import { parseLogFile, parseLogFileStreaming, formatSize, getToolsFromCache } from './parser.js';
+import { parseLogFile, parseLogFileStreaming, formatSize, getToolsFromCache, getSystemPromptFromCache } from './parser.js';
 import {
   renderEntryList,
   renderDetailHeader,
@@ -31,6 +31,24 @@ function getTools(entry) {
 
   // Fall back to inline tools (for backwards compatibility or if caching failed)
   return req.tools || [];
+}
+
+/**
+ * Helper function to get system prompt from an entry, handling both cached and inline system.
+ * @param {object} entry
+ * @returns {Array}
+ */
+function getSystemPrompt(entry) {
+  const req = entry.anthropicRequest;
+  if (!req) return [];
+
+  // Check if system prompt is cached
+  if (req._systemPromptCacheId) {
+    return getSystemPromptFromCache(req._systemPromptCacheId) || [];
+  }
+
+  // Fall back to inline system (for backwards compatibility or if caching failed)
+  return req.system || [];
 }
 
 // ===== State =====
@@ -303,7 +321,7 @@ function applyFilters() {
       }
 
       // Search system prompts
-      const system = entry.anthropicRequest?.system || [];
+      const system = getSystemPrompt(entry);
       const sysFound = system.some(s =>
         (s.text || JSON.stringify(s)).toLowerCase().includes(searchVal)
       );
@@ -373,7 +391,7 @@ function selectEntry(index) {
   renderDetailHeader(entry, detailHeader);
 
   // Update tab counts
-  systemCount.textContent = `(${entry.anthropicRequest?.system?.length || 0})`;
+  systemCount.textContent = `(${getSystemPrompt(entry).length})`;
   toolsCount.textContent = `(${getTools(entry).length})`;
 
   // Collect search matches and navigate to first one
@@ -539,7 +557,7 @@ function collectAllMatches(entry, searchTerm) {
   }
 
   // System tab
-  const system = entry.anthropicRequest?.system || [];
+  const system = getSystemPrompt(entry);
   let sysTotal = 0;
   for (const s of system) {
     const text = s.text || s.content || JSON.stringify(s);
