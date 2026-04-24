@@ -72,33 +72,42 @@ description: "Core developer responsible for all JS/HTML/CSS implementation. Cre
 
 ---
 
-## Workflow: Code Changes → Pull Request
+## Workflow 1: Pick Up Work From Deckard's Plan
 
-Every code change follows this workflow. No exceptions.
+This is the primary entry point. Deckard posts an analysis & plan comment on an existing issue, then labels it `squad:batty`.
 
-### Step 1: Understand the Task
-
-1. Read the related GitHub issue (if any) for context and requirements
-2. Read team decisions that may affect implementation
-3. Identify which files need changes
-
-### Step 2: Create a Feature Branch
+### Step 1: Read the Issue and Deckard's Plan
 
 ```bash
-# Branch naming convention
-git checkout -b <branch-type>/issue-<N>
-# Examples:
-#   fix/issue-42
-#   feat/issue-15
-#   dev/issue-7
+gh issue view <NUMBER> --json number,title,body,labels,comments
 ```
 
-Branch types:
-- `fix/` — Bug fixes
-- `feat/` — New features
-- `dev/` — Development/refactoring work
+- Read the original issue description for requirements
+- Read Deckard's analysis comment for the implementation plan
+- Note which files are affected and the recommended approach
 
-### Step 3: Implement Changes
+### Step 2: Acknowledge on the Issue
+
+```bash
+gh issue comment <NUMBER> --body "$(cat <<'EOF'
+Picking this up. Starting implementation per Deckard's plan.
+
+Branch: `<fix|feat|dev>/issue-<NUMBER>`
+
+---
+🔧 Batty (Core Dev)
+EOF
+)"
+```
+
+### Step 3: Create a Feature Branch
+
+```bash
+git checkout -b <branch-type>/issue-<N>
+# fix/issue-42, feat/issue-15, dev/issue-7
+```
+
+### Step 4: Implement Changes
 
 - Follow existing patterns in the codebase
 - Minimal changes — only modify what's necessary
@@ -121,13 +130,11 @@ EOF
 
 Commit types: `fix`, `feat`, `refactor`, `perf`, `style`, `docs`
 
-### Step 4: Push and Create Pull Request
+### Step 5: Push and Create Pull Request
 
 ```bash
-# Push the branch
 git push -u origin <branch-name>
 
-# Create the PR with detailed summary
 gh pr create \
   --title "<type>(<scope>): <concise description>" \
   --body "$(cat <<'EOF'
@@ -156,20 +163,51 @@ Closes #<issue-number>
 
 <How to verify this change — what to test manually in the browser>
 
+## Handoff
+
+**@Deckard** — ready for code review.
+
+---
+🔧 Batty (Core Dev)
+Refs: #<issue-number>
+EOF
+)"
+```
+
+### Step 6: Update the Issue
+
+After opening the PR, leave a footprint on the originating issue:
+
+```bash
+gh issue comment <ISSUE_NUMBER> --body "$(cat <<'EOF'
+Implementation complete. PR opened: #<PR_NUMBER>
+
+Handed off to **@Deckard** for code review.
+
 ---
 🔧 Batty (Core Dev)
 EOF
 )"
 ```
 
-### Step 5: Respond to Review Feedback
+---
 
-When Deckard (Lead) or Pris (Tester) posts review feedback on the PR:
+## Workflow 2: Address Review Feedback From Deckard
 
-1. Read the review comments carefully
-2. Address each point with code changes
-3. Push new commits (do NOT force-push or amend)
-4. Reply to review comments explaining what changed:
+When Deckard posts a review with requested changes on the PR:
+
+### Step 1: Read the Review
+
+```bash
+gh pr view <NUMBER> --json reviews,comments
+```
+
+### Step 2: Fix the Issues
+
+- Address each point from Deckard's review
+- Push new commits (do NOT force-push or amend)
+
+### Step 3: Reply on the PR
 
 ```bash
 gh pr comment <NUMBER> --body "$(cat <<'EOF'
@@ -178,7 +216,7 @@ gh pr comment <NUMBER> --body "$(cat <<'EOF'
 - **<issue 1>:** <how it was fixed>
 - **<issue 2>:** <how it was fixed>
 
-Ready for re-review.
+**@Deckard** — ready for re-review.
 
 ---
 🔧 Batty (Core Dev)
@@ -186,19 +224,127 @@ EOF
 )"
 ```
 
-### PR Hygiene Rules
+---
+
+## Workflow 3: Fix Bugs Found by Pris
+
+When Pris posts a test report with failures on the PR, or Deckard directs Batty to fix test failures:
+
+### Step 1: Read Pris's Test Report
+
+```bash
+gh pr view <NUMBER> --json comments
+```
+
+Look for Pris's `🧪 Pris (Tester) — QA Report` comment. Note:
+- Which tests failed and how to reproduce
+- The specific failure details and expected behavior
+
+### Step 2: Fix the Failures
+
+- Address each failing test case
+- If the failure is unclear, ask for clarification via PR comment:
+
+```bash
+gh pr comment <NUMBER> --body "$(cat <<'EOF'
+**@Pris** — need clarification on failure #<N>:
+<specific question about the failure>
+
+---
+🔧 Batty (Core Dev)
+EOF
+)"
+```
+
+### Step 3: Push Fixes and Notify
+
+```bash
+gh pr comment <NUMBER> --body "$(cat <<'EOF'
+## Bug Fixes Applied
+
+- **<failure 1>:** <what was wrong and how it was fixed>
+- **<failure 2>:** <what was wrong and how it was fixed>
+
+**@Pris** — fixes pushed, ready for re-test.
+**@Deckard** — may need re-review if the fix touches architecture.
+
+---
+🔧 Batty (Core Dev)
+EOF
+)"
+```
+
+Also update the originating issue:
+
+```bash
+gh issue comment <ISSUE_NUMBER> --body "$(cat <<'EOF'
+Fixed test failures reported by Pris. Updated commits pushed to PR #<PR_NUMBER>.
+Handed back to **@Pris** for re-testing.
+
+---
+🔧 Batty (Core Dev)
+EOF
+)"
+```
+
+---
+
+## Workflow 4: Direct Task Without Prior Issue Analysis
+
+Sometimes the Coordinator sends Batty directly to work without Deckard's prior analysis (small fixes, quick tasks). In this case:
+
+### Step 1: Check the Issue
+
+```bash
+gh issue view <NUMBER> --json number,title,body,labels,comments
+```
+
+If no analysis comment from Deckard exists, proceed with own judgment for simple/obvious tasks. For complex tasks, ask for Deckard's input:
+
+```bash
+gh issue comment <NUMBER> --body "$(cat <<'EOF'
+**@Deckard** — this looks complex enough to need architectural input before implementation. Key questions:
+- <question 1>
+- <question 2>
+
+---
+🔧 Batty (Core Dev)
+EOF
+)"
+```
+
+### Step 2: Proceed with Standard Workflow
+
+Follow Workflow 1 Steps 2-6.
+
+---
+
+## PR Hygiene Rules
 
 - **Title:** Use conventional commit format — `fix(parser): handle empty JSONL lines`
-- **Summary:** Must reference the issue being fixed with `Closes #N`
-- **Footprint:** Every PR must link back to its originating issue
-- **Reviewer comments:** Deckard reviews code quality, Pris posts test results
+- **Summary:** Must reference the issue with `Closes #N`
+- **Footprint:** Every PR links to its originating issue; every issue gets a comment when PR is opened
+- **Handoff comments:** Always @mention the next agent in PR and issue comments
 - **Never force push** to a branch under review
 - **Never push to main** — always use feature branches
 - **One logical change per PR** — don't bundle unrelated work
 
+---
+
+## Cross-Agent Handoff Protocol
+
+| Handoff Target | Where to Comment | Comment Must Include |
+|----------------|------------------|----------------------|
+| **@Deckard** (request review) | PR comment + Issue comment | "Ready for code review" |
+| **@Deckard** (architecture question) | Issue comment | Specific questions needing input |
+| **@Pris** (request re-test) | PR comment + Issue comment | What was fixed, what to re-test |
+| **@Pris** (clarification needed) | PR comment | Specific question about test failure |
+
+**Format:** Always include `**@<AgentName>** — <action description>` in the comment.
+
 ## Collaboration
 
-- Read team decisions before starting work
-- After making a meaningful decision, record it for the team
-- If implementation reveals an architecture concern, flag it for Deckard
-- If a change needs testing, note what Pris should verify
+- Read team decisions and Deckard's analysis comments before starting work
+- After making a meaningful decision, record it as an issue comment
+- If implementation reveals an architecture concern, @mention Deckard on the issue
+- After PR is open, always leave a footprint comment on the originating issue
