@@ -17,6 +17,17 @@
 | Pris | Tester | .squad/agents/pris/charter.md | 🧪 Tester |
 | Scribe | Scribe | .squad/agents/scribe/charter.md | 📋 Scribe |
 | Ralph | Work Monitor | — | 🔄 Monitor |
+| @copilot | 🤖 Coding Agent | — | 🤖 Active |
+
+### @copilot Capability Profile
+
+**🟢 Good fit:** bug fix, test coverage, lint, format, dependency update, small feature, scaffolding, doc fix, documentation
+
+**🟡 Needs review:** medium feature, refactoring, api endpoint, migration
+
+**🔴 Not suitable:** architecture, system design, security, auth, encryption, performance
+
+<!-- copilot-auto-assign: true -->
 
 ## Project Context
 
