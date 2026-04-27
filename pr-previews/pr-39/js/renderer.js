@@ -770,6 +770,7 @@ export function renderMessagesTab(entry) {
 
     let bodyRendered = false;
     let jsonRendered = false;
+    // showingJson tracks the active view; jsonRendered guards one-time DOM construction
     let showingJson = false;
 
     header.addEventListener('click', () => {
@@ -803,16 +804,16 @@ export function renderMessagesTab(entry) {
           jsonRendered = true;
           jsonBody.appendChild(createJsonView(msg));
         }
-        // Ensure the formatted body is also rendered for when the user switches back
-        if (!bodyRendered) {
-          bodyRendered = true;
-          renderMessageBody(formattedBody, msg, blocks, toolUseMap);
-        }
         formattedBody.classList.add('hidden');
         jsonBody.classList.remove('hidden');
         jsonToggleBtn.textContent = 'Formatted';
         jsonToggleBtn.title = 'Show formatted view';
       } else {
+        // Lazy render the formatted body if the user never expanded via the header
+        if (!bodyRendered) {
+          bodyRendered = true;
+          renderMessageBody(formattedBody, msg, blocks, toolUseMap);
+        }
         formattedBody.classList.remove('hidden');
         jsonBody.classList.add('hidden');
         jsonToggleBtn.textContent = '{ }';
