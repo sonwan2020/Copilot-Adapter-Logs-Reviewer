@@ -748,6 +748,12 @@ export function renderMessagesTab(entry) {
     previewSpan.textContent = previewText + (previewText.length >= 80 ? '...' : '');
     header.appendChild(previewSpan);
 
+    const jsonToggleBtn = document.createElement('button');
+    jsonToggleBtn.className = 'msg-json-btn';
+    jsonToggleBtn.textContent = '{ }';
+    jsonToggleBtn.title = 'Show raw JSON';
+    header.appendChild(jsonToggleBtn);
+
     const toggleIcon = document.createElement('span');
     toggleIcon.className = 'message-toggle-icon';
     toggleIcon.textContent = '\u25B6';
@@ -755,20 +761,63 @@ export function renderMessagesTab(entry) {
 
     const body = document.createElement('div');
     body.className = 'message-body hidden';
+
+    const formattedBody = document.createElement('div');
+    const jsonBody = document.createElement('div');
+    jsonBody.className = 'hidden';
+    body.appendChild(formattedBody);
+    body.appendChild(jsonBody);
+
     let bodyRendered = false;
+    let jsonRendered = false;
+    let showingJson = false;
 
     header.addEventListener('click', () => {
       const isHidden = body.classList.contains('hidden');
 
-      // Lazy render: build message body on first expand
+      // Lazy render: build formatted message body on first expand
       if (isHidden && !bodyRendered) {
         bodyRendered = true;
-        renderMessageBody(body, msg, blocks, toolUseMap);
+        renderMessageBody(formattedBody, msg, blocks, toolUseMap);
       }
 
       body.classList.toggle('hidden');
       toggleIcon.textContent = isHidden ? '\u25BC' : '\u25B6';
       previewSpan.classList.toggle('hidden', isHidden);
+    });
+
+    jsonToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showingJson = !showingJson;
+
+      // Expand the body if it is currently collapsed
+      if (body.classList.contains('hidden')) {
+        body.classList.remove('hidden');
+        toggleIcon.textContent = '\u25BC';
+        previewSpan.classList.add('hidden');
+      }
+
+      if (showingJson) {
+        // Lazy render the JSON view on first toggle
+        if (!jsonRendered) {
+          jsonRendered = true;
+          jsonBody.appendChild(createJsonView(msg));
+        }
+        // Ensure the formatted body is also rendered for when the user switches back
+        if (!bodyRendered) {
+          bodyRendered = true;
+          renderMessageBody(formattedBody, msg, blocks, toolUseMap);
+        }
+        formattedBody.classList.add('hidden');
+        jsonBody.classList.remove('hidden');
+        jsonToggleBtn.textContent = 'Formatted';
+        jsonToggleBtn.title = 'Show formatted view';
+      } else {
+        formattedBody.classList.remove('hidden');
+        jsonBody.classList.add('hidden');
+        jsonToggleBtn.textContent = '{ }';
+        jsonToggleBtn.title = 'Show raw JSON';
+      }
     });
 
     msgDiv.appendChild(header);
