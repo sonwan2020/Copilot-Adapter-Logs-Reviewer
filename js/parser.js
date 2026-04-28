@@ -3,9 +3,62 @@
  * Handles JSON parsing (including truncated files) and SSE response parsing.
  */
 
+/**
+ * LRU (Least Recently Used) cache implementation with automatic eviction.
+ * When capacity is reached, evicts 10% of oldest entries.
+ * Uses Map insertion order to track recency — most recent items are at the end.
+ */
+export class LRUCache {
+  constructor(maxSize = 200) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+
+  get(key) {
+    if (!this.cache.has(key)) return undefined;
+    
+    // Move to end (most recent position)
+    const value = this.cache.get(key);
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    // If key exists, delete it first so re-insertion moves it to end
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+
+    // Evict 10% of oldest entries when at capacity
+    if (this.cache.size >= this.maxSize) {
+      const evictCount = Math.ceil(this.maxSize * 0.1);
+      const iterator = this.cache.keys();
+      for (let i = 0; i < evictCount; i++) {
+        const oldest = iterator.next().value;
+        this.cache.delete(oldest);
+      }
+    }
+
+    this.cache.set(key, value);
+  }
+
+  has(key) {
+    return this.cache.has(key);
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+
+  get size() {
+    return this.cache.size;
+  }
+}
+
 // Global tools cache: Map<hash, tools array>
 // Deduplicates tool definitions across all entries to reduce memory usage
-const toolsCache = new Map();
+const toolsCache = new LRUCache(200);
 
 /**
  * Compute a SHA-256 hash for a tools array.
