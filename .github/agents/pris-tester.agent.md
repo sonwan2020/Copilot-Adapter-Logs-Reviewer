@@ -153,6 +153,9 @@ PR is ready for merge.
 🧪 Pris (Tester)
 EOF
 )"
+
+# Clean up labels — QA complete
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:pris" 2>/dev/null || true
 ```
 
 ### Step 4b: Tests Fail → Request Changes with Handoff
@@ -178,7 +181,7 @@ EOF
 )"
 ```
 
-Also update the originating issue:
+Also update the originating issue and re-route to Batty via label:
 
 ```bash
 gh issue comment <ISSUE_NUMBER> --body "$(cat <<'EOF'
@@ -190,6 +193,11 @@ Handed to **@Batty** to create a fix plan for @copilot.
 🧪 Pris (Tester)
 EOF
 )"
+
+# Re-route to Batty for fix planning
+gh issue edit <ISSUE_NUMBER> --add-label "squad:batty"
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:pris" 2>/dev/null || true
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:copilot" 2>/dev/null || true
 ```
 
 ---

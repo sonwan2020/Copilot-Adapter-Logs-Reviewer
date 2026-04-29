@@ -75,6 +75,23 @@ jobs:
               return;
             }
 
+            // Unassign all current assignees before routing to the new agent
+            // This ensures a clean handoff when labels change (re-routing)
+            if (issue.assignees && issue.assignees.length > 0) {
+              const currentAssignees = issue.assignees.map(a => a.login);
+              core.info(`Unassigning current assignees: ${currentAssignees.join(', ')}`);
+              try {
+                await github.rest.issues.removeAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  assignees: currentAssignees
+                });
+              } catch (err) {
+                core.warning(`Could not unassign: ${err.message}`);
+              }
+            }
+
             // For squad:copilot, replace the label with squad and re-route to Deckard
             // This ensures copilot requests go through the full pipeline
             if (label === 'squad:copilot') {

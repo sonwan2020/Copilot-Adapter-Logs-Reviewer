@@ -148,7 +148,9 @@ EOF
 ```bash
 # Label for Batty to pick up
 gh issue edit <NUMBER> --add-label "squad:batty"
-# Remove needs-info if it was set previously
+# Remove Deckard's own labels
+gh issue edit <NUMBER> --remove-label "squad" 2>/dev/null || true
+gh issue edit <NUMBER> --remove-label "squad:deckard" 2>/dev/null || true
 gh issue edit <NUMBER> --remove-label "squad:needs-info" 2>/dev/null || true
 ```
 
@@ -203,6 +205,11 @@ Handed off to **@Pris** for QA testing.
 🏗️ Deckard (Lead)
 EOF
 )"
+
+# Route to Pris for QA
+gh issue edit <ISSUE_NUMBER> --add-label "squad:pris"
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:copilot" 2>/dev/null || true
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:deckard" 2>/dev/null || true
 ```
 
 ### Step 3b: Reject → Request Changes with Handoff
@@ -225,6 +232,13 @@ gh pr review <NUMBER> --request-changes --body "$(cat <<'EOF'
 🏗️ Deckard (Lead) — Code Review
 EOF
 )"
+```
+
+```bash
+# Route back to Batty for fix planning
+gh issue edit <ISSUE_NUMBER> --add-label "squad:batty"
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:copilot" 2>/dev/null || true
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:deckard" 2>/dev/null || true
 ```
 
 ---
@@ -250,6 +264,10 @@ gh pr comment <NUMBER> --body "$(cat <<'EOF'
 🏗️ Deckard (Lead)
 EOF
 )"
+
+# Route back to Batty for fix planning
+gh issue edit <ISSUE_NUMBER> --add-label "squad:batty"
+gh issue edit <ISSUE_NUMBER> --remove-label "squad:pris" 2>/dev/null || true
 ```
 
 ---
