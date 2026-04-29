@@ -83,6 +83,7 @@ export async function parseLogFile(text) {
   const entries = [];
   const lines = trimmed.split('\n');
   let parseErrors = 0;
+  const sizeEncoder = new TextEncoder();
 
   for (const line of lines) {
     const l = line.trim();
@@ -90,6 +91,7 @@ export async function parseLogFile(text) {
     try {
       const entry = JSON.parse(l);
       entry._index = entries.length;
+      entry._rawSize = sizeEncoder.encode(l).byteLength;
 
       // Cache tools and replace with reference
       if (entry.anthropicRequest?.tools) {
@@ -147,6 +149,7 @@ export async function parseLogFileStreaming(file, onProgress) {
   const stream = file.stream();
   const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8');
+  const sizeEncoder = new TextEncoder();
 
   // Batch progress updates — report at most every 100ms to avoid UI thrashing
   let lastProgressTime = 0;
@@ -183,6 +186,7 @@ export async function parseLogFileStreaming(file, onProgress) {
         try {
           const entry = JSON.parse(line);
           entry._index = entries.length;
+          entry._rawSize = sizeEncoder.encode(line).byteLength;
 
           // Cache tools and replace with reference
           if (entry.anthropicRequest?.tools) {
@@ -216,6 +220,7 @@ export async function parseLogFileStreaming(file, onProgress) {
       try {
         const entry = JSON.parse(remaining);
         entry._index = entries.length;
+        entry._rawSize = sizeEncoder.encode(remaining).byteLength;
 
         // Cache tools and replace with reference
         if (entry.anthropicRequest?.tools) {

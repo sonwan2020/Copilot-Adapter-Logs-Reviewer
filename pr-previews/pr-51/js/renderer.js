@@ -44,6 +44,25 @@ function modelBadgeClass(model) {
 }
 
 /**
+ * Format a raw byte count into a human-readable size string.
+ * Uses K (kilobytes) or M (megabytes) with 2 decimal places when applicable.
+ * Returns plain number string for values under 1024 bytes.
+ * Maximum output length is 7 characters (e.g. "123.24K").
+ * @param {number} bytes
+ * @returns {string}
+ */
+function formatEntrySize(bytes) {
+  if (bytes >= 1024) {
+    const kb = bytes / 1024;
+    if (parseFloat(kb.toFixed(2)) >= 1000) {
+      return (bytes / (1024 * 1024)).toFixed(2) + 'M';
+    }
+    return kb.toFixed(2) + 'K';
+  }
+  return String(bytes);
+}
+
+/**
  * Create a copy-to-clipboard button.
  */
 function createCopyButton(text) {
@@ -644,6 +663,7 @@ export function renderEntryList(entries, container, onSelect) {
 
     const msgCount = req.messages?.length || 0;
     const toolCount = getTools(entry).length;
+    const sizeLabel = formatEntrySize(entry._rawSize || 0);
 
     item.innerHTML = `
       <div class="entry-item-header">
@@ -658,6 +678,7 @@ export function renderEntryList(entries, container, onSelect) {
         <span>${msgCount} msg${msgCount !== 1 ? 's' : ''}</span>
         ${toolCount > 0 ? `<span>${toolCount} tools</span>` : ''}
         ${entry.streaming ? '<span>streaming</span>' : ''}
+        <span class="entry-item-size">${escapeHtml(sizeLabel)}</span>
       </div>
     `;
 
