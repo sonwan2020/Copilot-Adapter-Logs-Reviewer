@@ -875,6 +875,7 @@ function renderMessageBody(body, msg, blocks, toolUseMap) {
   }
 
   jsonToggleBtn.addEventListener('click', () => {
+    // Absence of 'hidden' class means the view is visible
     const showingFormatted = !formattedView.classList.contains('hidden');
     if (showingFormatted) {
       // Lazily create JSON view on first toggle
