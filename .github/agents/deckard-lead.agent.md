@@ -59,9 +59,9 @@ description: "Team lead responsible for architecture decisions, code review, sco
 
 ---
 
-## Workflow 1: Issue Triage & Analysis
+## Workflow 1: Issue Triage & Analysis (First Entry Point)
 
-When a new issue gets the `squad` label, or a specific issue is assigned to Deckard:
+Deckard is **always the first agent** to look at any new issue. When a new issue gets the `squad` label, or a specific issue is assigned to Deckard:
 
 ### Step 1: Read and Analyze the Issue
 
@@ -69,7 +69,40 @@ When a new issue gets the `squad` label, or a specific issue is assigned to Deck
 gh issue view <NUMBER> --json number,title,body,labels,comments
 ```
 
-### Step 2: Post Analysis Comment
+Investigate the codebase as needed to understand the full impact:
+- Which files are affected?
+- What patterns must be respected?
+- Are there CSP, XSS, or performance implications?
+
+### Step 2: Evaluate Clarity
+
+**If the requirements are unclear or ambiguous:**
+- Post a comment asking for clarification
+- Do NOT proceed to planning until answers are received
+- Label the issue `squad:needs-info` to signal it's blocked
+
+```bash
+gh issue comment <NUMBER> --body "$(cat <<'EOF'
+## 🏗️ Deckard — Clarification Needed
+
+I've reviewed this issue and need more information before we can proceed:
+
+1. <specific question about requirements>
+2. <specific question about expected behavior>
+3. <specific question about scope>
+
+Please clarify and I'll put together an implementation plan.
+
+---
+🏗️ Deckard (Lead)
+EOF
+)"
+gh issue edit <NUMBER> --add-label "squad:needs-info"
+```
+
+**If the problem is clear and the solution is ready:** proceed to Step 3.
+
+### Step 3: Post Analysis & Plan
 
 Add a comment with the full analysis, plan, and decisions directly on the existing issue:
 
@@ -102,7 +135,7 @@ gh issue comment <NUMBER> --body "$(cat <<'EOF'
 - CSP implications: <none/describe>
 
 ### Handoff
-**@Batty** — please pick up implementation per the plan above. Branch: `<fix|feat|dev>/issue-<NUMBER>`
+**@Batty** — please review this plan, create a detailed implementation spec for @copilot, and assign the coding work. Branch: `<fix|feat|dev>/issue-<NUMBER>`
 
 ---
 🏗️ Deckard (Lead)
@@ -110,11 +143,13 @@ EOF
 )"
 ```
 
-### Step 3: Assign and Label for Handoff
+### Step 4: Assign and Label for Handoff
 
 ```bash
-# Label for the next agent to pick up
+# Label for Batty to pick up
 gh issue edit <NUMBER> --add-label "squad:batty"
+# Remove needs-info if it was set previously
+gh issue edit <NUMBER> --remove-label "squad:needs-info" 2>/dev/null || true
 ```
 
 ---
@@ -184,7 +219,7 @@ gh pr review <NUMBER> --request-changes --body "$(cat <<'EOF'
 - <what needs to change and why>
 
 ### Handoff
-**@Batty** — please address the above issues and push new commits.
+**@Batty** — please create an updated implementation plan addressing the above issues, then assign to @copilot for the fixes.
 
 ---
 🏗️ Deckard (Lead) — Code Review
@@ -208,7 +243,8 @@ gh pr comment <NUMBER> --body "$(cat <<'EOF'
 <Assessment of the failures — are they critical? Expected? Scope-related?>
 
 ### Next Action
-**@Batty** — <specific instructions for fixing the failures>
+**@Batty** — please create a fix plan for the failures below and assign to @copilot:
+- <specific instructions for fixing the failures>
 
 ---
 🏗️ Deckard (Lead)
@@ -224,12 +260,14 @@ Whenever Deckard needs another agent to take over, the handoff MUST be recorded 
 
 | Handoff Target | Where to Comment | Comment Must Include |
 |----------------|------------------|----------------------|
-| **@Batty** (implement) | Issue comment | Plan, affected files, branch name |
-| **@Batty** (fix review feedback) | PR comment | Specific issues to address |
+| **@Batty** (plan for @copilot) | Issue comment | Analysis, affected files, branch name |
+| **@Batty** (fix review feedback) | PR comment | Specific issues to address — Batty re-plans for @copilot |
 | **@Pris** (test a PR) | PR review comment | What to focus testing on |
 | **@Pris** (verify a fix) | PR comment | What changed and what to re-test |
 
 **Format:** Always include `**@<AgentName>** — <action description>` so the next agent knows exactly what's expected.
+
+> **Note:** Deckard never assigns work directly to @copilot. The chain is always **Deckard → Batty → @copilot**. Batty translates Deckard's architectural plan into a step-by-step implementation spec that @copilot can execute.
 
 ## Collaboration
 

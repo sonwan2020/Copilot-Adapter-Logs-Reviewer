@@ -79,3 +79,5 @@ Scribe runs in the background after every substantial batch of agent work. Scrib
 - Reads decision inbox files dropped by other agents
 - Updates other agents' history files when cross-cutting work occurs
 - Commits `.squad/` state to keep it in version control
+- Tracks the full agent pipeline: **Deckard** (triage/analysis) → **Batty** (implementation planning) → **@copilot** (coding) → **Deckard** (code review) → **Pris** (QA testing)
+- When logging orchestration events, include which stage of the pipeline the work is in

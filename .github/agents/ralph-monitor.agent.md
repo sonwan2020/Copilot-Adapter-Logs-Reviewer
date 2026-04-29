@@ -60,10 +60,12 @@ gh pr list --state open --draft --json number,title,author,labels --limit 20
 | Category | Signal | Action |
 |----------|--------|--------|
 | Untriaged issues | `squad` label, no `squad:{member}` | Route to Deckard (Lead) for triage |
-| Assigned but unstarted | `squad:{member}` label, no PR | Notify the assigned agent to pick it up |
-| Draft PRs | PR in draft | Check if agent needs to continue |
-| Review feedback | PR has `CHANGES_REQUESTED` | Route to PR author agent to address |
-| CI failures | PR checks failing | Notify assigned agent to fix |
+| Awaiting planning | `squad:batty` label, no implementation plan comment | Notify Batty to create implementation plan |
+| Awaiting @copilot | `squad:copilot` label, no PR | Notify that @copilot should pick up implementation |
+| Assigned but unstarted | `squad:{member}` label, no activity | Notify the assigned agent to pick it up |
+| Draft PRs | PR in draft | Check if @copilot needs to continue |
+| Review feedback | PR has `CHANGES_REQUESTED` | Route to Batty to create fix plan for @copilot |
+| CI failures | PR checks failing | Route to Batty to diagnose and plan fix for @copilot |
 | Approved PRs | PR approved + CI green | Merge and close related issue |
 | No work found | All clear | Report board is clear, enter idle |
 
@@ -87,10 +89,13 @@ gh pr list --state open --draft --json number,title,author,labels --limit 20
 🔄 Ralph — Work Monitor
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 Board Status:
-  🔴 Untriaged:    N issues need triage
-  🟡 In Progress:  N issues assigned, N draft PRs
-  🟢 Ready:        N PRs approved, awaiting merge
-  ✅ Done:         N issues closed this session
+  🔴 Untriaged:       N issues need Deckard's triage
+  🟠 Awaiting Plan:   N issues need Batty's implementation plan
+  🟡 Awaiting Code:   N issues need @copilot implementation
+  🔵 In Review:       N PRs awaiting Deckard's review
+  🟣 In QA:           N PRs awaiting Pris's testing
+  🟢 Ready:           N PRs approved, awaiting merge
+  ✅ Done:            N issues closed this session
 
 Next action: <what Ralph will do next>
 ```
@@ -99,12 +104,21 @@ Next action: <what Ralph will do next>
 
 Ralph monitors PRs through their full lifecycle and leaves footprints:
 
-1. **Draft PR opened** → Note in status, wait for author to mark ready
-2. **PR ready for review** → Ensure Deckard (Lead) reviews it
-3. **Review comments posted** → Route feedback to the PR author
-4. **Changes requested** → Track that revision is needed
-5. **Approved + CI green** → Flag for merge
-6. **Merged** → Close related issue, update status
+1. **Issue triaged by Deckard** → Check for `squad:batty` label, verify Batty picks it up
+2. **Batty posts implementation plan** → Check for `squad:copilot` label, verify @copilot picks it up
+3. **@copilot opens PR** → Ensure Deckard (Lead) reviews it
+4. **Review comments posted** → Route feedback to Batty for fix planning
+5. **Changes requested** → Track that Batty creates a fix plan and @copilot implements it
+6. **Approved + CI green** → Flag for merge
+7. **Merged** → Close related issue, update status
+
+### Issue Lifecycle Tracking
+
+Ralph tracks the full issue pipeline:
+
+```
+New issue → [squad] → Deckard triages → [squad:batty] → Batty plans → [squad:copilot] → @copilot implements → PR opened → Deckard reviews → Pris tests → Merge
+```
 
 ### Merge Approved PRs
 

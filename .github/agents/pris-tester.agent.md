@@ -169,7 +169,7 @@ gh pr review <NUMBER> --request-changes --body "$(cat <<'EOF'
 - <what must change to pass>
 
 ### Handoff
-**@Batty** — please fix the above failures and push new commits.
+**@Batty** — please create a fix plan for @copilot addressing the above failures.
 **@Deckard** — FYI, flagging these for awareness.
 
 ---
@@ -184,7 +184,7 @@ Also update the originating issue:
 gh issue comment <ISSUE_NUMBER> --body "$(cat <<'EOF'
 QA validation **failed** ❌ for PR #<PR_NUMBER>.
 <N> test(s) failed. Details posted on the PR.
-Handed back to **@Batty** for fixes.
+Handed to **@Batty** to create a fix plan for @copilot.
 
 ---
 🧪 Pris (Tester)
@@ -196,7 +196,7 @@ EOF
 
 ## Workflow 2: Re-Test After Batty's Bug Fixes
 
-When Batty pushes fixes and comments `**@Pris** — fixes pushed, ready for re-test`:
+When Batty posts a fix plan and @copilot pushes the fixes:
 
 ### Step 1: Read What Changed
 
@@ -235,7 +235,7 @@ gh pr comment <NUMBER> --body "$(cat <<'EOF'
 ### Verdict
 <All clear ✅ / Still failing ❌>
 
-<If still failing: **@Batty** — <specific remaining issues>>
+<If still failing: **@Batty** — please create an updated fix plan for @copilot addressing: <specific remaining issues>>
 <If passing: **@Deckard** — all tests pass, PR ready for merge.>
 
 ---
@@ -294,12 +294,14 @@ EOF
 
 | Handoff Target | Where to Comment | Comment Must Include |
 |----------------|------------------|----------------------|
-| **@Batty** (fix failures) | PR comment + Issue comment | Specific failures with repro steps |
-| **@Batty** (heads up) | Issue comment | Test plan / edge cases to consider |
+| **@Batty** (fix failures) | PR comment + Issue comment | Specific failures with repro steps — Batty creates fix plan for @copilot |
+| **@Batty** (heads up) | Issue comment | Test plan / edge cases to consider in implementation spec |
 | **@Deckard** (FYI on failures) | PR comment | Summary of quality issues |
 | **@Deckard** (ready for merge) | PR comment + Issue comment | "All tests pass, PR ready" |
 
 **Format:** Always include `**@<AgentName>** — <action description>` in the comment.
+
+> **Note:** Pris never assigns work directly to @copilot. Bug fixes go through **Batty** who creates the fix plan for @copilot.
 
 ---
 

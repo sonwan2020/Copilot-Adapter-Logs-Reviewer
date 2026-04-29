@@ -1,5 +1,18 @@
 name: Squad Triage
 
+# Triggers when any squad-related label is added to an issue.
+# Routes the issue to the correct GitHub Copilot coding agent based on the label.
+#
+# Label → Agent mapping (see .squad/team.md for full pipeline details):
+#   squad           → deckard-lead    (first entry point: triage & analysis)
+#   squad:copilot   → deckard-lead    (copilot work goes through the full pipeline starting with Deckard)
+#   squad:batty     → batty-core-dev  (implementation planning for @copilot)
+#   squad:pris      → pris-tester     (QA testing)
+#   squad:ralph     → ralph-monitor   (work queue monitoring)
+#   squad:scribe    → scribe          (session logging, background)
+#
+# Pipeline: Issue → Deckard → Batty → @copilot → Deckard (review) → Pris (QA) → Merge
+
 on:
   issues:
     types: [labeled]
@@ -9,246 +22,114 @@ permissions:
   contents: read
 
 jobs:
-  triage:
-    if: github.event.label.name == 'squad'
+  route-to-agent:
+    if: >-
+      github.event.label.name == 'squad' ||
+      startsWith(github.event.label.name, 'squad:')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Triage issue via Lead agent
+      - name: Route issue to agent
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const issue = context.payload.issue;
+            const label = context.payload.label.name;
 
-            // Read team roster — check .squad/ first, fall back to .ai-team/
+            // Read team roster for context — see .squad/team.md for full pipeline
             let teamFile = '.squad/team.md';
             if (!fs.existsSync(teamFile)) {
               teamFile = '.ai-team/team.md';
             }
             if (!fs.existsSync(teamFile)) {
-              core.warning('No .squad/team.md or .ai-team/team.md found — cannot triage');
+              core.warning('No .squad/team.md or .ai-team/team.md found — cannot route');
               return;
             }
 
-            const content = fs.readFileSync(teamFile, 'utf8');
-            const lines = content.split('\n');
+            const teamContent = fs.readFileSync(teamFile, 'utf8');
 
-            // Check if @copilot is on the team
-            const hasCopilot = content.includes('🤖 Coding Agent');
-            const copilotAutoAssign = content.includes('<!-- copilot-auto-assign: true -->');
+            // Label → Agent file mapping
+            // squad and squad:copilot both route to deckard-lead (pipeline entry point)
+            const labelToAgent = {
+              'squad':          { agent: 'deckard-lead',   name: 'Deckard', role: 'Lead',         emoji: '🏗️', action: 'triage and analyze this issue' },
+              'squad:copilot':  { agent: 'deckard-lead',   name: 'Deckard', role: 'Lead',         emoji: '🏗️', action: 'triage and analyze this issue (copilot work goes through the full pipeline)' },
+              'squad:deckard':  { agent: 'deckard-lead',   name: 'Deckard', role: 'Lead',         emoji: '🏗️', action: 'triage and analyze this issue' },
+              'squad:batty':    { agent: 'batty-core-dev', name: 'Batty',   role: 'Core Dev',     emoji: '🔧', action: 'create an implementation plan for @copilot' },
+              'squad:pris':     { agent: 'pris-tester',    name: 'Pris',    role: 'Tester',       emoji: '🧪', action: 'run QA validation' },
+              'squad:ralph':    { agent: 'ralph-monitor',  name: 'Ralph',   role: 'Work Monitor', emoji: '🔄', action: 'check work queue status' },
+              'squad:scribe':   { agent: 'scribe',         name: 'Scribe',  role: 'Scribe',       emoji: '📋', action: 'update session logs and decisions' },
+            };
 
-            // Parse @copilot capability profile
-            let goodFitKeywords = [];
-            let needsReviewKeywords = [];
-            let notSuitableKeywords = [];
-
-            if (hasCopilot) {
-              // Extract capability tiers from team.md
-              const goodFitMatch = content.match(/🟢\s*Good fit[^:]*:\s*(.+)/i);
-              const needsReviewMatch = content.match(/🟡\s*Needs review[^:]*:\s*(.+)/i);
-              const notSuitableMatch = content.match(/🔴\s*Not suitable[^:]*:\s*(.+)/i);
-
-              if (goodFitMatch) {
-                goodFitKeywords = goodFitMatch[1].toLowerCase().split(',').map(s => s.trim());
-              } else {
-                goodFitKeywords = ['bug fix', 'test coverage', 'lint', 'format', 'dependency update', 'small feature', 'scaffolding', 'doc fix', 'documentation'];
-              }
-              if (needsReviewMatch) {
-                needsReviewKeywords = needsReviewMatch[1].toLowerCase().split(',').map(s => s.trim());
-              } else {
-                needsReviewKeywords = ['medium feature', 'refactoring', 'api endpoint', 'migration'];
-              }
-              if (notSuitableMatch) {
-                notSuitableKeywords = notSuitableMatch[1].toLowerCase().split(',').map(s => s.trim());
-              } else {
-                notSuitableKeywords = ['architecture', 'system design', 'security', 'auth', 'encryption', 'performance'];
-              }
-            }
-
-            const members = [];
-            let inMembersTable = false;
-            for (const line of lines) {
-              if (line.match(/^##\s+(Members|Team Roster)/i)) {
-                inMembersTable = true;
-                continue;
-              }
-              if (inMembersTable && line.startsWith('## ')) {
-                break;
-              }
-              if (inMembersTable && line.startsWith('|') && !line.includes('---') && !line.includes('Name')) {
-                const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-                if (cells.length >= 2 && cells[0] !== 'Scribe') {
-                  members.push({
-                    name: cells[0],
-                    role: cells[1]
-                  });
-                }
-              }
-            }
-
-            // Read routing rules — check .squad/ first, fall back to .ai-team/
-            let routingFile = '.squad/routing.md';
-            if (!fs.existsSync(routingFile)) {
-              routingFile = '.ai-team/routing.md';
-            }
-            let routingContent = '';
-            if (fs.existsSync(routingFile)) {
-              routingContent = fs.readFileSync(routingFile, 'utf8');
-            }
-
-            // Find the Lead
-            const lead = members.find(m =>
-              m.role.toLowerCase().includes('lead') ||
-              m.role.toLowerCase().includes('architect') ||
-              m.role.toLowerCase().includes('coordinator')
-            );
-
-            if (!lead) {
-              core.warning('No Lead role found in team roster — cannot triage');
+            const mapping = labelToAgent[label];
+            if (!mapping) {
+              core.info(`Label "${label}" has no agent mapping — skipping`);
               return;
             }
 
-            // Build triage context
-            const memberList = members.map(m =>
-              `- **${m.name}** (${m.role}) → label: \`squad:${m.name.toLowerCase()}\``
-            ).join('\n');
-
-            // Determine best assignee based on issue content and routing
-            const issueText = `${issue.title}\n${issue.body || ''}`.toLowerCase();
-
-            let assignedMember = null;
-            let triageReason = '';
-            let copilotTier = null;
-
-            // First, evaluate @copilot fit if enabled
-            if (hasCopilot) {
-              const isNotSuitable = notSuitableKeywords.some(kw => issueText.includes(kw));
-              const isGoodFit = !isNotSuitable && goodFitKeywords.some(kw => issueText.includes(kw));
-              const isNeedsReview = !isNotSuitable && !isGoodFit && needsReviewKeywords.some(kw => issueText.includes(kw));
-
-              if (isGoodFit) {
-                copilotTier = 'good-fit';
-                assignedMember = { name: '@copilot', role: 'Coding Agent' };
-                triageReason = '🟢 Good fit for @copilot — matches capability profile';
-              } else if (isNeedsReview) {
-                copilotTier = 'needs-review';
-                assignedMember = { name: '@copilot', role: 'Coding Agent' };
-                triageReason = '🟡 Routing to @copilot (needs review) — a squad member should review the PR';
-              } else if (isNotSuitable) {
-                copilotTier = 'not-suitable';
-                // Fall through to normal routing
-              }
+            // Verify the agent file exists
+            const agentFile = `.github/agents/${mapping.agent}.agent.md`;
+            if (!fs.existsSync(agentFile)) {
+              core.warning(`Agent file ${agentFile} not found — cannot route`);
+              return;
             }
 
-            // If not routed to @copilot, use keyword-based routing
-            if (!assignedMember) {
-              for (const member of members) {
-                const role = member.role.toLowerCase();
-                if ((role.includes('frontend') || role.includes('ui')) &&
-                    (issueText.includes('ui') || issueText.includes('frontend') ||
-                     issueText.includes('css') || issueText.includes('component') ||
-                     issueText.includes('button') || issueText.includes('page') ||
-                     issueText.includes('layout') || issueText.includes('design'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to frontend/UI work';
-                  break;
-                }
-                if ((role.includes('backend') || role.includes('api') || role.includes('server')) &&
-                    (issueText.includes('api') || issueText.includes('backend') ||
-                     issueText.includes('database') || issueText.includes('endpoint') ||
-                     issueText.includes('server') || issueText.includes('auth'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to backend/API work';
-                  break;
-                }
-                if ((role.includes('test') || role.includes('qa') || role.includes('quality')) &&
-                    (issueText.includes('test') || issueText.includes('bug') ||
-                     issueText.includes('fix') || issueText.includes('regression') ||
-                     issueText.includes('coverage'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to testing/quality work';
-                  break;
-                }
-                if ((role.includes('devops') || role.includes('infra') || role.includes('ops')) &&
-                    (issueText.includes('deploy') || issueText.includes('ci') ||
-                     issueText.includes('pipeline') || issueText.includes('docker') ||
-                     issueText.includes('infrastructure'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to DevOps/infrastructure work';
-                  break;
-                }
-              }
-            }
+            // For squad:copilot, replace the label with squad and re-route to Deckard
+            // This ensures copilot requests go through the full pipeline
+            if (label === 'squad:copilot') {
+              core.info(`squad:copilot detected — routing through Deckard for full pipeline triage`);
 
-            // Default to Lead if no routing match
-            if (!assignedMember) {
-              assignedMember = lead;
-              triageReason = 'No specific domain match — assigned to Lead for further analysis';
-            }
-
-            const isCopilot = assignedMember.name === '@copilot';
-            const assignLabel = isCopilot ? 'squad:copilot' : `squad:${assignedMember.name.toLowerCase()}`;
-
-            // Add the member-specific label
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.number,
-              labels: [assignLabel]
-            });
-
-            // Apply default triage verdict
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.number,
-              labels: ['go:needs-research']
-            });
-
-            // Auto-assign @copilot if enabled
-            if (isCopilot && copilotAutoAssign) {
+              // Remove squad:copilot and add squad:deckard to make the routing explicit
               try {
-                await github.rest.issues.addAssignees({
+                await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: issue.number,
-                  assignees: ['copilot']
+                  name: 'squad:copilot'
                 });
               } catch (err) {
-                core.warning(`Could not auto-assign @copilot: ${err.message}`);
+                core.warning(`Could not remove squad:copilot label: ${err.message}`);
               }
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['squad', 'squad:deckard']
+              });
             }
 
-            // Build copilot evaluation note
-            let copilotNote = '';
-            if (hasCopilot && !isCopilot) {
-              if (copilotTier === 'not-suitable') {
-                copilotNote = `\n\n**@copilot evaluation:** 🔴 Not suitable — issue involves work outside the coding agent's capability profile.`;
-              } else {
-                copilotNote = `\n\n**@copilot evaluation:** No strong capability match — routed to squad member.`;
-              }
+            // Assign @copilot to the issue so the agent picks it up
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                assignees: ['copilot']
+              });
+            } catch (err) {
+              core.warning(`Could not assign @copilot: ${err.message}`);
             }
 
-            // Post triage comment
+            // Post routing comment
             const comment = [
-              `### 🏗️ Squad Triage — ${lead.name} (${lead.role})`,
+              `### ${mapping.emoji} Squad Routing — ${mapping.name} (${mapping.role})`,
               '',
               `**Issue:** #${issue.number} — ${issue.title}`,
-              `**Assigned to:** ${assignedMember.name} (${assignedMember.role})`,
-              `**Reason:** ${triageReason}`,
-              copilotTier === 'needs-review' ? `\n⚠️ **PR review recommended** — a squad member should review @copilot's work on this one.` : '',
-              copilotNote,
+              `**Label:** \`${label}\``,
+              `**Agent:** \`${mapping.agent}\``,
+              `**Action:** ${mapping.name}, please ${mapping.action}.`,
               '',
-              `---`,
+              '---',
               '',
-              `**Team roster:**`,
-              memberList,
-              hasCopilot ? `- **@copilot** (Coding Agent) → label: \`squad:copilot\`` : '',
+              '**Agent Pipeline** (see `.squad/team.md`):',
+              '```',
+              'Issue → Deckard (triage) → Batty (plan) → @copilot (code) → Deckard (review) → Pris (QA) → Merge',
+              '```',
               '',
-              `> To reassign, remove the current \`squad:*\` label and add the correct one.`,
-            ].filter(Boolean).join('\n');
+              '> To reassign, remove the current `squad:*` label and add the correct one.',
+            ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -257,4 +138,4 @@ jobs:
               body: comment
             });
 
-            core.info(`Triaged issue #${issue.number} → ${assignedMember.name} (${assignLabel})`);
+            core.info(`Routed issue #${issue.number} → ${mapping.agent} (${label})`);
