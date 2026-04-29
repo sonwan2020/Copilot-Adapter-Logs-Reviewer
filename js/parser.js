@@ -7,6 +7,9 @@
 // Deduplicates tool definitions across all entries to reduce memory usage
 const toolsCache = new Map();
 
+// Reusable encoder for computing raw byte sizes of JSONL lines
+const sizeEncoder = new TextEncoder();
+
 /**
  * Compute a SHA-256 hash for a tools array.
  * Uses the Web Crypto API to create a secure hash identifier.
@@ -83,7 +86,6 @@ export async function parseLogFile(text) {
   const entries = [];
   const lines = trimmed.split('\n');
   let parseErrors = 0;
-  const sizeEncoder = new TextEncoder();
 
   for (const line of lines) {
     const l = line.trim();
@@ -149,7 +151,6 @@ export async function parseLogFileStreaming(file, onProgress) {
   const stream = file.stream();
   const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8');
-  const sizeEncoder = new TextEncoder();
 
   // Batch progress updates — report at most every 100ms to avoid UI thrashing
   let lastProgressTime = 0;
